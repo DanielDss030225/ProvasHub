@@ -1,11 +1,11 @@
 "use client";
 
 import { useAuth } from "../../../../context/AuthContext";
-import { useEffect, useState, use } from "react";
+import { useRef, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../../lib/firebase";
-import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
-import { Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText } from "lucide-react";
+import { doc, getDoc, updateDoc, increment, runTransaction } from "firebase/firestore";
+import { Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText, Coins } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 
@@ -18,6 +18,7 @@ export default function SolvePage({ params }: PageProps) {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const { showAlert } = useAlert();
+    const headersCreditsRef = useRef<HTMLDivElement>(null); // Ref for the credits in header
 
     // Exam Data
     const [exam, setExam] = useState<any>(null);
@@ -31,6 +32,12 @@ export default function SolvePage({ params }: PageProps) {
     const [showAnswerKey, setShowAnswerKey] = useState(false);
     const [showSupportTextModal, setShowSupportTextModal] = useState(false);
 
+    // Credit System & Animation State
+    const [userCredits, setUserCredits] = useState(0);
+    const [flyingCoin, setFlyingCoin] = useState<{ startX: number, startY: number } | null>(null);
+    const [creditPulse, setCreditPulse] = useState(false);
+    const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(new Set()); // Track correctly answered questions to prevent duplicates
+
     // Graphic Modal State
     const [showGraphicModal, setShowGraphicModal] = useState(false);
 
@@ -42,6 +49,17 @@ export default function SolvePage({ params }: PageProps) {
             fetchExam(examId);
         }
     }, [user, authLoading, examId, router]);
+
+    // Fetch User Credits
+    useEffect(() => {
+        if (user) {
+            getDoc(doc(db, "users", user.uid)).then(snap => {
+                if (snap.exists()) {
+                    setUserCredits(snap.data().credits || 0);
+                }
+            });
+        }
+    }, [user]);
 
     // Track Resolutions (Debounced)
     useEffect(() => {
@@ -88,11 +106,69 @@ export default function SolvePage({ params }: PageProps) {
         }
     };
 
+    const playSound = (type: 'collect' | 'success') => {
+        // Check for reduced motion/sound preference (optional, using reduced motion as proxy for "minimalist" mode)
+        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (prefersReduced) return;
+
+        const audio = new Audio(`/sounds/coin-${type}.mp3`);
+        if (type === 'success') {
+            audio.volume = 0.2;
+        }
+        audio.play().catch(e => console.error("Audio play failed", e));
+    };
+
     const handleAnswer = (optionLetter: string) => {
         setAnswers(prev => ({
             ...prev,
             [currentIndex]: optionLetter
         }));
+    };
+
+    const confirmAndNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        // 1. Check if current answer is correct and eligible for reward
+        const currentAnswer = answers[currentIndex];
+        const isCorrect = exam.extractedData?.questions[currentIndex]?.correctAnswer?.toLowerCase() === currentAnswer?.toLowerCase();
+
+        if (isCorrect && user && !answeredQuestions.has(currentIndex)) {
+            try {
+                // Capture selected option position for animation start
+                let startX = 0;
+                let startY = 0;
+
+                const selectedBtn = document.getElementById(`option-${currentIndex}-${currentAnswer.toLowerCase()}`);
+                if (selectedBtn) {
+                    const rect = selectedBtn.getBoundingClientRect();
+                    startX = rect.left + rect.width / 2;
+                    startY = rect.top + rect.height / 2;
+                } else {
+                    // Fallback to Next button if something fails
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    startX = rect.left + rect.width / 2;
+                    startY = rect.top + rect.height / 2;
+                }
+
+                // Persist to Firebase
+                await runTransaction(db, async (transaction) => {
+                    const userRef = doc(db, "users", user.uid);
+                    const userDoc = await transaction.get(userRef);
+                    if (!userDoc.exists()) throw "User does not exist!";
+                    const newCredits = (userDoc.data().credits || 0) + 1;
+                    transaction.update(userRef, { credits: newCredits });
+                });
+
+                // Trigger Animation
+                setAnsweredQuestions(prev => new Set(prev).add(currentIndex));
+                setFlyingCoin({ startX, startY });
+                playSound('collect');
+
+            } catch (error) {
+                console.error("Error updating credits:", error);
+            }
+        }
+
+        // 2. Navigate to Next Question
+        setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1));
     };
 
     const calculateScore = () => {
@@ -378,6 +454,15 @@ export default function SolvePage({ params }: PageProps) {
                         {formatTime(timer)}
                     </div>
 
+                    {/* Credits Display */}
+                    <div ref={headersCreditsRef} className={clsx(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-full font-mono font-bold transition-all duration-300",
+                        creditPulse ? "bg-green-100 text-green-600 scale-110 shadow-[0_0_15px_rgba(16,185,129,0.5)]" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    )}>
+                        <Coins className={clsx("w-4 h-4", creditPulse && "text-green-500")} />
+                        <span>{userCredits}</span>
+                    </div>
+
                     <button
                         onClick={() => setShowAnswerKey(true)}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
@@ -465,6 +550,7 @@ export default function SolvePage({ params }: PageProps) {
                                 return (
                                     <button
                                         key={idx}
+                                        id={`option-${currentIndex}-${letter}`}
                                         onClick={() => handleAnswer(letter)}
                                         className={clsx(
                                             "w-full text-left p-5 rounded-2xl border-2 transition-all duration-300 flex items-center gap-5 group relative overflow-hidden",
@@ -515,7 +601,7 @@ export default function SolvePage({ params }: PageProps) {
                     </div>
 
                     <button
-                        onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
+                        onClick={confirmAndNext}
                         disabled={currentIndex === questions.length - 1}
                         className="flex items-center gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-200 disabled:opacity-50 disabled:hover:bg-slate-900 px-8 py-3 rounded-2xl font-bold transition shadow-xl shadow-slate-900/10 dark:shadow-none transform hover:-translate-y-0.5 active:translate-y-0"
                     >
@@ -608,6 +694,30 @@ export default function SolvePage({ params }: PageProps) {
                     </div>
                 </div>
 
+            )}
+
+            {/* Coin Animation Overlay */}
+            {flyingCoin && headersCreditsRef.current && (
+                <div
+                    className="fixed z-[100] pointer-events-none w-8 h-8 text-yellow-500 animate-coin-fly"
+                    style={{
+                        left: flyingCoin.startX,
+                        top: flyingCoin.startY,
+                        '--tx': `0px`, // Initial relative offset (can vary for curve)
+                        '--ty': `-100px`,
+                        '--target-x': `${headersCreditsRef.current.getBoundingClientRect().left + headersCreditsRef.current.offsetWidth / 2 - flyingCoin.startX - 16}px`, // -16 for half coin width
+                        '--target-y': `${headersCreditsRef.current.getBoundingClientRect().top + headersCreditsRef.current.offsetHeight / 2 - flyingCoin.startY - 16}px`
+                    } as React.CSSProperties}
+                    onAnimationEnd={() => {
+                        setFlyingCoin(null);
+                        setUserCredits(prev => prev + 1); // Visual update
+                        setCreditPulse(true);
+                        playSound('success');
+                        setTimeout(() => setCreditPulse(false), 1000);
+                    }}
+                >
+                    <Coins className="w-full h-full fill-yellow-500 animate-[coinPulse_0.5s_linear_infinite]" />
+                </div>
             )}
 
         </div>
