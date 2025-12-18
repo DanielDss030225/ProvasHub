@@ -26,12 +26,6 @@ body {
   overflow: hidden;
 }
 
-.flex-1.min-w-0.space-y-8 {
-  overflow: auto;
-  max-height: 100vh !important;
-
-}
-
 .direito {
   width: 300px !important;
   border-radius: 0px !important;
@@ -61,4 +55,21 @@ button,
   padding-bottom: 100px !important;
   background-color: rgb(113, 113, 113) !important;
   margin-bottom: 50px !important;
+}
+
+.custom-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari and Opera */
+}
+
+button .buttonPesquisar {
+  margin-left: 100px !important;
+  color: #7f23fe !important;
 }

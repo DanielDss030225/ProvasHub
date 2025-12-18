@@ -412,7 +412,7 @@ export default function SolvePage({ params }: PageProps) {
                                         className="text-sm font-medium text-violet-600 hover:text-violet-800 hover:underline flex items-center gap-1"
                                     >
                                         <Eye className="w-4 h-4" />
-                                        Ver Gráfico
+                                        Ver Imagem
                                     </button>
                                 )}
                             </div>
@@ -446,8 +446,8 @@ export default function SolvePage({ params }: PageProps) {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 pb-12 flex justify-center custom-scrollbar">
-                    <div className="w-full max-w-4xl space-y-8 pb-24 pb-5">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 pb-20 flex justify-center custom-scrollbar">
+                    <div className="w-full max-w-4xl space-y-8 pb-40">
                         {/* Question Text */}
                         <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-3xl shadow-lg border border-slate-100 dark:border-slate-800/50 relative overflow-hidden group">
                             <div className="absolute top-0 left-0 w-2 h-full bg-violet-600"></div>
@@ -488,13 +488,14 @@ export default function SolvePage({ params }: PageProps) {
                                             {opt}
                                         </span>
 
-                                        {isSelected && (
-                                            <div className="absolute inset-y-0 right-0 w-1 bg-violet-600 rounded-l-full"></div>
-                                        )}
+
                                     </button>
                                 );
                             })}
                         </div>
+
+                        {/* Improved Spacer for Bottom Navigation */}
+                        <div className="h-24 w-full shrink-0"></div>
                     </div>
 
                 </div>
@@ -525,31 +526,34 @@ export default function SolvePage({ params }: PageProps) {
             </div>
 
             {/* Answer Key Modal */}
-            {showAnswerKey && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowAnswerKey(false)}>
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gabarito</h3>
-                            <button onClick={() => setShowAnswerKey(false)} className="text-slate-400 hover:text-slate-600">
-                                <XCircle className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-5 gap-2">
-                            {questions.map((q: any, idx: number) => (
-                                <div key={idx} className={clsx(
-                                    "p-2 rounded text-center border text-sm font-bold",
-                                    q.correctAnswer ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-50 border-slate-200 text-slate-400"
-                                )}>
-                                    <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
-                                    {q.correctAnswer?.toUpperCase() || '-'}
-                                </div>
-                            ))}
+            {
+                showAnswerKey && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowAnswerKey(false)}>
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gabarito</h3>
+                                <button onClick={() => setShowAnswerKey(false)} className="text-slate-400 hover:text-slate-600">
+                                    <XCircle className="w-6 h-6" />
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-5 gap-2">
+                                {questions.map((q: any, idx: number) => (
+                                    <div key={idx} className={clsx(
+                                        "p-2 rounded text-center border text-sm font-bold",
+                                        q.correctAnswer ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-50 border-slate-200 text-slate-400"
+                                    )}>
+                                        <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
+                                        {q.correctAnswer?.toUpperCase() || '-'}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
 
-            {/* Support Text Modal */}
+                )}
+
+            {/* Support Text Moda l */}
+
             {showSupportTextModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowSupportTextModal(false)}>
                     <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
@@ -579,9 +583,11 @@ export default function SolvePage({ params }: PageProps) {
                         </div>
                     </div>
                 </div>
+
             )}
 
-            {/* Graphic Modal */}
+            {/* Graphic Moda l */}
+
             {showGraphicModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowGraphicModal(false)}>
                     <div className="bg-transparent w-full max-w-4xl rounded-2xl p-2 relative animate-in zoom-in-95 flex flex-col items-center" onClick={e => e.stopPropagation()}>
@@ -601,6 +607,7 @@ export default function SolvePage({ params }: PageProps) {
                         )}
                     </div>
                 </div>
+
             )}
 
         </div>

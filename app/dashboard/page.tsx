@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db, storage } from "../../lib/firebase";
 import { updateProfile, signOut } from "firebase/auth";
-import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign } from "lucide-react";
@@ -193,6 +193,7 @@ export default function Dashboard() {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -357,6 +358,28 @@ export default function Dashboard() {
         }
     };
 
+    const handleDeleteExam = async (exam: any) => {
+        if (!user || user.uid !== exam.userId) return;
+
+        showAlert(
+            "Tem certeza que deseja excluir esta prova permanentemente? Esta ação não pode ser desfeita.",
+            "warning",
+            "Excluir Prova",
+            async () => {
+                try {
+                    await deleteDoc(doc(db, "exams", exam.id));
+                    // Optional: Delete from storage if you have the path, but Firestore is main
+                    setSelectedExam(null);
+                    setExams(prev => prev.filter(e => e.id !== exam.id));
+                    showAlert("Prova excluída com sucesso!", "success", "Sucesso");
+                } catch (error) {
+                    console.error("Error deleting exam:", error);
+                    showAlert("Erro ao excluir prova.", "error", "Erro");
+                }
+            }
+        );
+    };
+
     const handleShare = (e: React.MouseEvent, examId: string) => {
         e.stopPropagation();
         const url = `${window.location.origin}/dashboard/solve/${examId}`;
@@ -432,6 +455,17 @@ export default function Dashboard() {
             console.error("Error checking image dimensions", e);
             // Fallback to direct upload if check fails
             uploadImage(file);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.addEventListener("load", () => {
+                setTempImageSrc(reader.result?.toString() || "");
+            });
+            reader.readAsDataURL(file);
         }
     };
 
@@ -593,6 +627,15 @@ export default function Dashboard() {
                                 <span className="font-semibold text-slate-700 dark:text-slate-200 group-hover:text-blue-700 dark:group-hover:text-blue-400">Editar / Revisar</span>
                                 <div className="bg-blue-100 text-blue-600 p-2 rounded-lg">
                                     <Upload className="w-5 h-5" />
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => handleDeleteExam(selectedExam)}
+                                className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition group"
+                            >
+                                <span className="font-semibold text-slate-700 dark:text-slate-200 group-hover:text-red-700 dark:group-hover:text-red-400">Excluir Prova</span>
+                                <div className="bg-red-100 text-red-600 p-2 rounded-lg">
+                                    <Trash2 className="w-5 h-5" />
                                 </div>
                             </button>
                         </div>
@@ -822,6 +865,7 @@ export default function Dashboard() {
                         </div>
                         {user && (
                             <div className="flex items-center gap-4">
+                                <ThemeToggle />
                                 {/* Notification Bell */}
                                 <div className="relative" ref={notificationRef}>
                                     <button
@@ -926,7 +970,6 @@ export default function Dashboard() {
                                         </div>
                                     )}
                                 </div>
-                                <ThemeToggle />
                                 <button
                                     onClick={() => setIsSearchOpen(true)}
                                     className="p-3 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-800 shadow-sm transition"
@@ -977,14 +1020,13 @@ export default function Dashboard() {
             </div>
 
             {/* Spacer for fixed header */}
-            <div className="h-0"></div>
 
             <div className="max-w-6xl mx-auto space-y-8 pt-8">
 
                 <div className="flex gap-8 items-start">
 
                     {/* Main Content (3/4) */}
-                    <div className="flex-1 min-w-0 space-y-8">
+                    <div className="flex-1 min-w-0 space-y-8 overflow-y-auto h-[calc(100vh-50px)] pb-24 custom-scrollbar">
                         <div className="h-5"></div>
                         {/* Upload Section */}
                         {/* Upload Button Section */}
@@ -1017,8 +1059,8 @@ export default function Dashboard() {
                                     onClick={() => setIsSearchOpen(true)}
                                     className="flex items-center gap-2 text-violet-600 dark:text-violet-400 text-sm font-medium hover:underline cursor-pointer"
                                 >
-                                    <Search className="w-4 h-4" />
-                                    Pesquisar
+                                    <Search className="w-5 h-5" />
+                                    <h2>Pesquisar</h2>
                                 </button>
                             </div>
 
@@ -1052,13 +1094,33 @@ export default function Dashboard() {
                                         >
                                             <div className="p-5 flex-1">
                                                 <div className="flex justify-between items-start mb-4">
-                                                    <div className={clsx(
-                                                        "px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold uppercase tracking-wide",
-                                                        exam.status === 'ready' ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                                    )}>
-                                                        <FileText className="w-4 h-4" />
-                                                        <span>{exam.status === 'ready' ? "Pronta" : "Em Revisão"}</span>
-                                                    </div>
+                                                    {(() => {
+                                                        const hasAnswerKey = exam.extractedData?.questions?.some((q: any) => q.correctAnswer);
+                                                        const isReady = exam.status === 'ready';
+
+                                                        let statusLabel = "Em Revisão";
+                                                        let statusClass = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+
+                                                        if (isReady) {
+                                                            if (hasAnswerKey) {
+                                                                statusLabel = "Pronta";
+                                                                statusClass = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400";
+                                                            } else {
+                                                                statusLabel = "Pendente de Gabarito";
+                                                                statusClass = "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400";
+                                                            }
+                                                        }
+
+                                                        return (
+                                                            <div className={clsx(
+                                                                "px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold uppercase tracking-wide",
+                                                                statusClass
+                                                            )}>
+                                                                <FileText className="w-4 h-4" />
+                                                                <span>{statusLabel}</span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
 
                                                 <h3 className="font-bold text-slate-800 dark:text-white mb-1 line-clamp-1" title={exam.extractedData?.title || exam.fileName}>
@@ -1136,14 +1198,22 @@ export default function Dashboard() {
                     </div>
 
                     {/* Right Sidebar: Exam Requests (1/4) */}
-                    <div className="direito">
+                    <div className="direito h-[calc(100vh-50px)] overflow-y-hidden pb-24 custom-scrollbar">
                         <div className="h-10"></div>
+
                         <div className="">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                     <AlertCircle className="w-5 h-5 text-violet-500" />
                                     Pedidos de Provas
                                 </h3>
+                                <button
+                                    onClick={() => setIsRequestModalOpen(true)}
+                                    className="w-[150px] mt-4 py-3 bg-violet-50 dark:bg-violet-900/10 text-violet-700 dark:text-violet-300 font-semibold rounded-xl hover:bg-violet-100 dark:hover:bg-violet-900/30 transition text-sm flex items-center justify-center gap-2"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#902b91"><path d="m226-559 78 33q14-28 29-54t33-52l-56-11-84 84Zm142 83 114 113q42-16 90-49t90-75q70-70 109.5-155.5T806-800q-72-5-158 34.5T492-656q-42 42-75 90t-49 90Zm178-65q-23-23-23-56.5t23-56.5q23-23 57-23t57 23q23 23 23 56.5T660-541q-23 23-57 23t-57-23Zm19 321 84-84-11-56q-26 18-52 32.5T532-299l33 79Zm313-653q19 121-23.5 235.5T708-419l20 99q4 20-2 39t-20 33L538-80l-84-197-171-171-197-84 167-168q14-14 33.5-20t39.5-2l99 20q104-104 218-147t235-24ZM157-321q35-35 85.5-35.5T328-322q35 35 34.5 85.5T327-151q-25 25-83.5 43T82-76q14-103 32-161.5t43-83.5Zm57 56q-10 10-20 36.5T180-175q27-4 53.5-13.5T270-208q12-12 13-29t-11-29q-12-12-29-11.5T214-265Z" /></svg>
+                                    Pedir
+                                </button>
                             </div>
 
                             {examRequests.length === 0 ? (
@@ -1157,9 +1227,15 @@ export default function Dashboard() {
                                     </button>
                                 </div>
                             ) : (
-                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+                                <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-1 custom-scrollbar">
                                     {examRequests.map((req) => (
                                         <div key={req.id} className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 transition group relative">
+                                            {/* Pulsing Dot */}
+                                            <span className="absolute top-3 right-3 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500"></span>
+                                            </span>
+
                                             <div className="flex items-start gap-3 mb-2">
                                                 {req.requesterPhoto ? (
                                                     <img src={req.requesterPhoto} className="w-8 h-8 rounded-full" />
@@ -1180,7 +1256,7 @@ export default function Dashboard() {
                                                     className="w-full py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg hover:bg-violet-600 hover:text-white hover:border-violet-600 transition flex items-center justify-center gap-2"
                                                 >
                                                     <Upload className="w-3 h-3" />
-                                                    Atender (+100 <CircleDollarSign className="w-3 h-3 text-yellow-500 inline" />)
+                                                    Atender (+100<CircleDollarSign className="w-3 h-3 text-yellow-500 inline" />)
                                                 </button>
                                             )}
                                         </div>
@@ -1188,17 +1264,92 @@ export default function Dashboard() {
                                 </div>
                             )}
 
-                            <button
-                                onClick={() => setIsRequestModalOpen(true)}
-                                className="w-full mt-4 py-3 bg-violet-50 dark:bg-violet-900/10 text-violet-700 dark:text-violet-300 font-semibold rounded-xl hover:bg-violet-100 dark:hover:bg-violet-900/30 transition text-sm flex items-center justify-center gap-2"
-                            >
-                                <Heart className="w-4 h-4" />
-                                Pedir uma Prova
-                            </button>
+
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Profile Modal */}
+            {isProfileModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleCloseProfileModal}>
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 space-y-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-white">Editar Perfil</h3>
+                            <button onClick={handleCloseProfileModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                {profilePhoto ? (
+                                    <img src={profilePhoto} alt="Profile" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-slate-800" />
+                                ) : (
+                                    <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                        <User className="w-10 h-10" />
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Edit className="w-8 h-8 text-white" />
+                                </div>
+                            </div>
+                            <input
+                                type="file"
+                                hidden
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                accept="image/*"
+                            />
+                            {imageUploadProgress > 0 && imageUploadProgress < 100 && (
+                                <div className="w-full max-w-[200px] h-1 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className="h-full bg-violet-600 transition-all duration-300" style={{ width: `${imageUploadProgress}%` }}></div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome de Exibição</label>
+                                <input
+                                    value={profileName}
+                                    onChange={e => setProfileName(e.target.value)}
+                                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+                                    placeholder="Seu nome"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={handleCloseProfileModal}
+                                className="flex-1 py-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition font-medium"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleUpdateProfile}
+                                disabled={updatingProfile}
+                                className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {updatingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Salvar Alterações"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Image Cropper Component */}
+            {tempImageSrc && (
+                <ImageCropper
+                    imageSrc={tempImageSrc}
+                    onCancel={() => {
+                        setTempImageSrc(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    onCropComplete={handleCropComplete}
+                />
+            )}
 
             {/* Create Request Modal */}
             {isRequestModalOpen && (
@@ -1243,6 +1394,6 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
-        </div >
+        </div>
     );
 }

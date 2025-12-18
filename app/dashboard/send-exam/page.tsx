@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { auth, db, storage } from "../../../lib/firebase";
 import { collection, doc, runTransaction, Timestamp, increment, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { processExam } from "../../../lib/processor";
+import { processExamAction } from "../../actions/exam";
 import { Upload, ChevronLeft, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { useAlert } from "../../context/AlertContext";
 import clsx from "clsx";
@@ -269,9 +269,9 @@ function SendExamContent() {
 
             // 2. Process Entire Exam
             setUploadStatus("Processando... (Isso pode demorar alguns minutos)");
-            addLog("Enviando prova para IA...");
+            addLog("Reconhecendo prova com IA...");
 
-            const examData = await processExam(base64String, file.type);
+            const examData = await processExamAction(base64String, file.type);
 
             setProgress(90);
             addLog(`Prova processada: ${examData.title}`);
