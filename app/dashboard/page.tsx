@@ -856,12 +856,11 @@ export default function Dashboard() {
                 <div className="max-w-5xl mx-auto px-8 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <img
-                                src="/icone.png"
-                                alt="ProvasHub AI Logo"
-                                className="w-10 h-10 object-contain"
-                            />
-                            <h1 className="text-3xl font-bold text-slate-900">ProvasHub AI</h1>
+
+                            <h1 className="text-3xl font-bold">
+                                <span className="text-slate-900 dark:text-white">View</span>
+                                <span className="text-violet-600 dark:text-violet-400">Go</span>
+                            </h1>
                         </div>
                         {user && (
                             <div className="flex items-center gap-4">

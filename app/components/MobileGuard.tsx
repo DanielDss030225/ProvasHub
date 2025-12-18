@@ -48,7 +48,7 @@ export function MobileGuard({ children }: { children: React.ReactNode }) {
                 </button>
 
                 <p className="mt-8 text-xs text-slate-600 font-medium tracking-widest uppercase">
-                    ProvasHub AI Mobile
+                    ViewGo Mobile
                 </p>
             </div>
         );

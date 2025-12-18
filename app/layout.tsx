@@ -9,7 +9,7 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ProvasHub Nexus AI | Provas Digitais Inteligentes",
+  title: "ViewGo | Provas Digitais Inteligentes",
   description: "Converta provas de concursos em PDFs em provas digitais interativas com inteligência artificial.",
 };
 

@@ -29,12 +29,10 @@ export default function Home() {
         <div>
           <img
             src="/icone.png"
-            alt="ProvasHub Nexus AI Logo"
+            alt="ViewGo Logo"
             className="w-24 h-24 mx-auto mb-4 object-contain"
           />
-          <h1 className="text-4xl font-bold tracking-tight text-violet-600 dark:text-violet-400">
-            ProvasHub Nexus AI
-          </h1>
+
           <p className="mt-4 text-lg text-slate-600 dark:text-slate-300">
             Ei, concurseiro! Basta enviar o PDF para transformá-lo em uma prova 100% digital e interativa.       </p>
         </div>
@@ -50,7 +48,9 @@ export default function Home() {
           />
           <span>Entrar com o Google</span>
         </button>
-
+        <h4 className="font-bold tracking-tight text-violet-600 dark:text-violet-400">
+          ViewGo
+        </h4>
         <p className="text-sm text-slate-400 dark:text-slate-500">
           Inteligencia artificial      </p>
       </div>
