@@ -5,6 +5,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { MobileGuard } from "./components/MobileGuard";
 
 import { Providers } from "./providers";
+import ClickSoundProvider from "./components/ClickSoundProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 transition-colors duration-300`}>
         <MobileGuard>
+          <ClickSoundProvider />
           <AuthProvider>
             <Providers>
               {children}
