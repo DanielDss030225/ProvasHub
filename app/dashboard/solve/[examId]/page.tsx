@@ -222,7 +222,7 @@ export default function SolvePage({ params }: PageProps) {
     if (status === 'finished') {
         const score = calculateScore();
         return (
-            <div className="h-screen bg-slate-50 dark:bg-slate-950 p-6 overflow-y-auto transition-colors duration-300">
+            <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 flex flex-col md:flex-row overflow-hidden transition-all duration-500">
                 <div className="max-w-3xl mx-auto space-y-6">
                     {/* Header Results */}
                     <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-center space-y-4">
@@ -440,7 +440,7 @@ export default function SolvePage({ params }: PageProps) {
 
     // --- SOLVING VIEW ---
     return (
-        <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+        <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 transition-all duration-500">
             {/* Header */}
             <div className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 shadow-sm z-10 shrink-0 transition-colors">
                 <div className="flex items-center gap-4">
