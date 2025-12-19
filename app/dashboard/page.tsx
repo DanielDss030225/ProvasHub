@@ -42,6 +42,23 @@ export default function Dashboard() {
 
     // Exam Requests System
     const [examRequests, setExamRequests] = useState<any[]>([]);
+
+
+
+    const handleDeleteRequest = async (e: React.MouseEvent, requestId: string) => {
+        e.stopPropagation();
+        if (!confirm("Tem certeza que deseja excluir este pedido?")) return;
+
+        try {
+            await deleteDoc(doc(db, "exam_requests", requestId));
+            setExamRequests(prev => prev.filter(req => req.id !== requestId));
+            showAlert("Pedido excluído com sucesso!", "success", "Sucesso");
+        } catch (error) {
+            console.error("Error deleting request:", error);
+            showAlert("Erro ao excluir pedido.", "error", "Erro");
+        }
+    };
+
     const handleAcceptFulfillment = async (notification: any) => {
         if (!notification.data?.requestId || !notification.data?.examId || !notification.data?.fulfillerId) return;
 
@@ -1198,6 +1215,17 @@ export default function Dashboard() {
                                                             </button>
                                                         </div>
                                                     )}
+
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteExam(exam);
+                                                        }}
+                                                        className="p-1.5 text-slate-400 hover:text-red-500 transition rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 ml-1"
+                                                        title="Excluir Prova"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -1246,6 +1274,16 @@ export default function Dashboard() {
                                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500"></span>
                                             </span>
 
+                                            {req.requesterId === user.uid && (
+                                                <button
+                                                    onClick={(e) => handleDeleteRequest(e, req.id)}
+                                                    className="absolute top-3 right-8 text-slate-400 hover:text-red-500 transition"
+                                                    title="Excluir Pedido"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+
                                             <div className="flex items-start gap-3 mb-2">
                                                 {req.requesterPhoto ? (
                                                     <img src={req.requesterPhoto} className="w-8 h-8 rounded-full" />
@@ -1281,129 +1319,162 @@ export default function Dashboard() {
             </div>
 
             {/* Profile Modal */}
-            {isProfileModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleCloseProfileModal}>
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 space-y-6" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-slate-800 dark:text-white">Editar Perfil</h3>
-                            <button onClick={handleCloseProfileModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
+            {
+                isProfileModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleCloseProfileModal}>
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 space-y-6" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white">Editar Perfil</h3>
+                                <button onClick={handleCloseProfileModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
 
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                {profilePhoto ? (
-                                    <img src={profilePhoto} alt="Profile" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-slate-800" />
-                                ) : (
-                                    <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                                        <User className="w-10 h-10" />
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                    {profilePhoto ? (
+                                        <img src={profilePhoto} alt="Profile" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-slate-800" />
+                                    ) : (
+                                        <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                            <User className="w-10 h-10" />
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Edit className="w-8 h-8 text-white" />
+                                    </div>
+                                </div>
+                                <input
+                                    type="file"
+                                    hidden
+                                    ref={fileInputRef}
+                                    onChange={handleFileChange}
+                                    accept="image/*"
+                                />
+                                {imageUploadProgress > 0 && imageUploadProgress < 100 && (
+                                    <div className="w-full max-w-[200px] h-1 bg-slate-200 rounded-full overflow-hidden">
+                                        <div className="h-full bg-violet-600 transition-all duration-300" style={{ width: `${imageUploadProgress}%` }}></div>
                                     </div>
                                 )}
-                                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Edit className="w-8 h-8 text-white" />
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome de Exibição</label>
+                                    <input
+                                        value={profileName}
+                                        onChange={e => setProfileName(e.target.value)}
+                                        className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+                                        placeholder="Seu nome"
+                                    />
                                 </div>
                             </div>
-                            <input
-                                type="file"
-                                hidden
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                accept="image/*"
-                            />
-                            {imageUploadProgress > 0 && imageUploadProgress < 100 && (
-                                <div className="w-full max-w-[200px] h-1 bg-slate-200 rounded-full overflow-hidden">
-                                    <div className="h-full bg-violet-600 transition-all duration-300" style={{ width: `${imageUploadProgress}%` }}></div>
-                                </div>
-                            )}
-                        </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome de Exibição</label>
-                                <input
-                                    value={profileName}
-                                    onChange={e => setProfileName(e.target.value)}
-                                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
-                                    placeholder="Seu nome"
-                                />
+                            {/* My Requests Section */}
+                            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                                <h4 className="font-bold text-slate-800 dark:text-white mb-3">Meus Pedidos Pendentes</h4>
+                                {examRequests.filter(r => r.requesterId === user.uid).length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">Você não tem pedidos ativos.</p>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scrollbar">
+                                        {examRequests.filter(r => r.requesterId === user.uid).map(req => (
+                                            <div key={req.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 relative group">
+                                                <button
+                                                    onClick={(e) => handleDeleteRequest(e, req.id)}
+                                                    className="absolute top-2 right-2 text-slate-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
+                                                    title="Excluir Pedido"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                                <h5 className="font-bold text-xs text-slate-800 dark:text-white mb-1 line-clamp-1">{req.subject}</h5>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2">{req.description}</p>
+                                                <span className="inline-block mt-2 text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 rounded-md font-medium">
+                                                    Em Aberto
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        </div>
 
-                        <div className="flex gap-3 pt-2">
-                            <button
-                                onClick={handleCloseProfileModal}
-                                className="flex-1 py-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition font-medium"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleUpdateProfile}
-                                disabled={updatingProfile}
-                                className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {updatingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Salvar Alterações"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Image Cropper Component */}
-            {tempImageSrc && (
-                <ImageCropper
-                    imageSrc={tempImageSrc}
-                    onCancel={() => {
-                        setTempImageSrc(null);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                    }}
-                    onCropComplete={handleCropComplete}
-                />
-            )}
-
-            {/* Create Request Modal */}
-            {isRequestModalOpen && (
-                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsRequestModalOpen(false)}>
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Pedir uma Prova</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina / Assunto</label>
-                                <input
-                                    value={requestSubject}
-                                    onChange={e => setRequestSubject(e.target.value)}
-                                    placeholder="Ex: Direito Constitucional, Matemática..."
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição do Pedido</label>
-                                <textarea
-                                    value={requestDescription}
-                                    onChange={e => setRequestDescription(e.target.value)}
-                                    placeholder="Descreva o que você precisa (ex: Banca Cebraspe, 2024, Nível Superior...)"
-                                    className="w-full p-2 h-24 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                />
-                            </div>
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex gap-3 pt-2">
                                 <button
-                                    onClick={() => setIsRequestModalOpen(false)}
-                                    className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg transition"
+                                    onClick={handleCloseProfileModal}
+                                    className="flex-1 py-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition font-medium"
                                 >
                                     Cancelar
                                 </button>
                                 <button
-                                    onClick={handleCreateRequest}
-                                    disabled={creatingRequest}
-                                    className="flex-1 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition disabled:opacity-50"
+                                    onClick={handleUpdateProfile}
+                                    disabled={updatingProfile}
+                                    className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
-                                    {creatingRequest ? "Enviando..." : "Publicar Pedido"}
+                                    {updatingProfile ? <Loader2 className="w-5 h-5 animate-spin" /> : "Salvar Alterações"}
                                 </button>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Image Cropper Component */}
+            {
+                tempImageSrc && (
+                    <ImageCropper
+                        imageSrc={tempImageSrc}
+                        onCancel={() => {
+                            setTempImageSrc(null);
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        onCropComplete={handleCropComplete}
+                    />
+                )
+            }
+
+            {/* Create Request Modal */}
+            {
+                isRequestModalOpen && (
+                    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsRequestModalOpen(false)}>
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4">Pedir uma Prova</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disciplina / Assunto</label>
+                                    <input
+                                        value={requestSubject}
+                                        onChange={e => setRequestSubject(e.target.value)}
+                                        placeholder="Ex: Direito Constitucional, Matemática..."
+                                        className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Descrição do Pedido</label>
+                                    <textarea
+                                        value={requestDescription}
+                                        onChange={e => setRequestDescription(e.target.value)}
+                                        placeholder="Descreva o que você precisa (ex: Banca Cebraspe, 2024, Nível Superior...)"
+                                        className="w-full p-2 h-24 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+                                </div>
+                                <div className="flex gap-2 pt-2">
+                                    <button
+                                        onClick={() => setIsRequestModalOpen(false)}
+                                        className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded-lg transition"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleCreateRequest}
+                                        disabled={creatingRequest}
+                                        className="flex-1 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition disabled:opacity-50"
+                                    >
+                                        {creatingRequest ? "Enviando..." : "Publicar Pedido"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
