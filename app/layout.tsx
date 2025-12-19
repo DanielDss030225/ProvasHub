@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "ViewGo | Provas Digitais Inteligentes",
-  description: "Converta provas de concursos em PDFs em provas digitais interativas com inteligência artificial.",
+  description: "A plataforma do concurseiro chegou! Resolva provas, pratique questões e transforme PDFs em provas digitais interativas.",
 };
 
 export default function RootLayout({
