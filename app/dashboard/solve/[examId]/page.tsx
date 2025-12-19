@@ -27,6 +27,7 @@ export default function SolvePage({ params }: PageProps) {
     // Quiz State
     const [status, setStatus] = useState<'solving' | 'finished'>('solving');
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [maxIndex, setMaxIndex] = useState(0); // Track furthest progress
     const [answers, setAnswers] = useState<Record<number, string>>({}); // index -> option letter (a,b,c...)
     const [timer, setTimer] = useState(0);
     const [showAnswerKey, setShowAnswerKey] = useState(false);
@@ -60,6 +61,11 @@ export default function SolvePage({ params }: PageProps) {
             });
         }
     }, [user]);
+
+    // Update Max Progress
+    useEffect(() => {
+        setMaxIndex(prev => Math.max(prev, currentIndex));
+    }, [currentIndex]);
 
     // Track Resolutions (Debounced)
     useEffect(() => {
@@ -131,39 +137,42 @@ export default function SolvePage({ params }: PageProps) {
         const isCorrect = exam.extractedData?.questions[currentIndex]?.correctAnswer?.toLowerCase() === currentAnswer?.toLowerCase();
 
         if (isCorrect && user && !answeredQuestions.has(currentIndex)) {
-            try {
-                // Capture selected option position for animation start
-                let startX = 0;
-                let startY = 0;
+            // Constraint: Only award if NOT revisiting (currentIndex >= maxIndex)
+            if (currentIndex >= maxIndex) {
+                try {
+                    // Capture selected option position for animation start
+                    let startX = 0;
+                    let startY = 0;
 
-                const selectedBtn = document.getElementById(`option-${currentIndex}-${currentAnswer.toLowerCase()}`);
-                if (selectedBtn) {
-                    const rect = selectedBtn.getBoundingClientRect();
-                    startX = rect.left + rect.width / 2;
-                    startY = rect.top + rect.height / 2;
-                } else {
-                    // Fallback to Next button if something fails
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    startX = rect.left + rect.width / 2;
-                    startY = rect.top + rect.height / 2;
+                    const selectedBtn = document.getElementById(`option-${currentIndex}-${currentAnswer.toLowerCase()}`);
+                    if (selectedBtn) {
+                        const rect = selectedBtn.getBoundingClientRect();
+                        startX = rect.left + rect.width / 2;
+                        startY = rect.top + rect.height / 2;
+                    } else {
+                        // Fallback to Next button if something fails
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        startX = rect.left + rect.width / 2;
+                        startY = rect.top + rect.height / 2;
+                    }
+
+                    // Persist to Firebase
+                    await runTransaction(db, async (transaction) => {
+                        const userRef = doc(db, "users", user.uid);
+                        const userDoc = await transaction.get(userRef);
+                        if (!userDoc.exists()) throw "User does not exist!";
+                        const newCredits = (userDoc.data().credits || 0) + 1;
+                        transaction.update(userRef, { credits: newCredits });
+                    });
+
+                    // Trigger Animation
+                    setAnsweredQuestions(prev => new Set(prev).add(currentIndex));
+                    setFlyingCoin({ startX, startY });
+                    playSound('collect');
+
+                } catch (error) {
+                    console.error("Error updating credits:", error);
                 }
-
-                // Persist to Firebase
-                await runTransaction(db, async (transaction) => {
-                    const userRef = doc(db, "users", user.uid);
-                    const userDoc = await transaction.get(userRef);
-                    if (!userDoc.exists()) throw "User does not exist!";
-                    const newCredits = (userDoc.data().credits || 0) + 1;
-                    transaction.update(userRef, { credits: newCredits });
-                });
-
-                // Trigger Animation
-                setAnsweredQuestions(prev => new Set(prev).add(currentIndex));
-                setFlyingCoin({ startX, startY });
-                playSound('collect');
-
-            } catch (error) {
-                console.error("Error updating credits:", error);
             }
         }
 
@@ -622,17 +631,38 @@ export default function SolvePage({ params }: PageProps) {
                                     <XCircle className="w-6 h-6" />
                                 </button>
                             </div>
-                            <div className="grid grid-cols-5 gap-2">
-                                {questions.map((q: any, idx: number) => (
-                                    <div key={idx} className={clsx(
-                                        "p-2 rounded text-center border text-sm font-bold",
-                                        q.correctAnswer ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-50 border-slate-200 text-slate-400"
-                                    )}>
-                                        <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
-                                        {q.correctAnswer?.toUpperCase() || '-'}
-                                    </div>
-                                ))}
-                            </div>
+                            {maxIndex === 0 ? (
+                                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                                    <p>Responda questões para ter acesso ao gabarito.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-5 gap-2">
+                                    {questions.map((q: any, idx: number) => {
+                                        // Show ONLY if strictly before current max progress
+                                        if (idx >= maxIndex) return null;
+
+                                        const userAns = answers[idx];
+                                        let styleClass = "bg-slate-50 border-slate-200 text-slate-400"; // Default (Skipped)
+
+                                        if (userAns) {
+                                            const isCorrect = userAns.toLowerCase() === q.correctAnswer?.toLowerCase();
+                                            styleClass = isCorrect
+                                                ? "bg-green-50 border-green-200 text-green-700"
+                                                : "bg-red-50 border-red-200 text-red-700";
+                                        }
+
+                                        return (
+                                            <div key={idx} className={clsx(
+                                                "p-2 rounded text-center border text-sm font-bold transition-all",
+                                                styleClass
+                                            )}>
+                                                <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
+                                                {q.correctAnswer?.toUpperCase() || '-'}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
 

@@ -8,7 +8,7 @@ import { updateProfile, signOut } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign } from "lucide-react";
+import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { ImageCropper } from "../components/ImageCropper";
 import { getImageDimensions } from "../../lib/imageUtils";
@@ -710,6 +710,18 @@ export default function Dashboard() {
                         <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">Como obter mais créditos?</h4>
                         <div className="space-y-3">
                             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
+                                <div className="p-2 bg-amber-100 text-amber-600 rounded-lg shrink-0">
+                                    <Target className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-slate-800 dark:text-white text-sm">Responda Questões</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Ganhe <span className="font-bold text-green-600">+1 crédito</span> para cada questão respondida corretamente.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
                                 <div className="p-2 bg-violet-100 text-violet-600 rounded-lg shrink-0">
                                     <Upload className="w-4 h-4" />
                                 </div>
@@ -1035,8 +1047,7 @@ export default function Dashboard() {
                                     Enviar nova Prova ou Simulado
                                 </h2>
                                 <p className="text-slate-500 dark:text-slate-400 mb-8">
-                                    Transforme seus PDFs em provas interativas automaticamente com nossa IA.
-                                </p>
+                                    Coopere com a comunidade e transforme seus PDFs em provas interativas.                                </p>
 
                                 <button
                                     onClick={() => router.push('/dashboard/send-exam')}

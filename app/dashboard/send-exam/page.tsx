@@ -359,8 +359,7 @@ function SendExamContent() {
                             Upload de Arquivo PDF
                         </h2>
                         <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                            Transforme seus PDFs em provas interativas usando nossa Inteligência Artificial. Suportamos arquivos de até 10MB.
-                        </p>
+                            Coopere com a comunidade e transforme seus PDFs em provas interativas.                        </p>
                     </div>
 
                     {!uploading ? (
