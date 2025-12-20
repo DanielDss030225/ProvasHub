@@ -10,6 +10,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { FormattedText } from "../components/FormattedText";
 import { ImageCropper } from "../components/ImageCropper";
 import { getImageDimensions } from "../../lib/imageUtils";
 import { useAlert } from "../context/AlertContext";
@@ -391,18 +392,27 @@ export default function Dashboard() {
         if (!user || user.uid !== exam.userId) return;
 
         showAlert(
-            "Tem certeza que deseja excluir esta prova permanentemente? Esta ação não pode ser desfeita.",
+            "Tem certeza que deseja excluir esta prova e todas as suas questões do banco? Esta ação não pode ser desfeita.",
             "warning",
             "Excluir Prova",
             async () => {
                 try {
+                    // 1. Delete the exam document
                     await deleteDoc(doc(db, "exams", exam.id));
+
+                    // 2. Delete all corresponding questions from the question bank
+                    const q = query(collection(db, "questions"), where("examId", "==", exam.id));
+                    const snapshot = await getDocs(q);
+
+                    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                    await Promise.all(deletePromises);
+
                     // Optional: Delete from storage if you have the path, but Firestore is main
                     setSelectedExam(null);
                     setExams(prev => prev.filter(e => e.id !== exam.id));
-                    showAlert("Prova excluída com sucesso!", "success", "Sucesso");
+                    showAlert("Prova e questões excluídas com sucesso!", "success", "Sucesso");
                 } catch (error) {
-                    console.error("Error deleting exam:", error);
+                    console.error("Error deleting exam and questions:", error);
                     showAlert("Erro ao excluir prova.", "error", "Erro");
                 }
             }
@@ -1196,9 +1206,9 @@ export default function Dashboard() {
                                                 <h3 className="font-bold text-slate-800 dark:text-white mb-1 line-clamp-1" title={exam.extractedData?.title || exam.fileName}>
                                                     {exam.extractedData?.title || exam.fileName}
                                                 </h3>
-                                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-1">
-                                                    {exam.extractedData?.description || exam.extractedData?.course || "Disciplina Desconhecida"}
-                                                </p>
+                                                <div className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-1">
+                                                    <FormattedText text={exam.extractedData?.description || exam.extractedData?.course || "Disciplina Desconhecida"} />
+                                                </div>
 
                                                 <div className="flex items-center gap-2 text-xs text-slate-400 mb-4">
                                                     <span>{exam.extractedData?.questions?.length || 0} questões</span>
@@ -1339,7 +1349,9 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                             <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-1">{req.subject}</h4>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">{req.description}</p>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3 line-clamp-2">
+                                                <FormattedText text={req.description} />
+                                            </div>
 
                                             {req.requesterId !== user.uid && (
                                                 <button

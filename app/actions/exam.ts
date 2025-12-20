@@ -36,6 +36,8 @@ export interface ExamMetadata {
     disciplina?: string;      // Ex: "Português", "Matemática", "Direito"
     areaDisciplina?: string;  // Ex: "Interpretação de Texto", "Constitucional"
     ano?: number;             // Ex: 2024, 2023
+    estado?: string;          // Ex: "SP", "RJ", "MG"
+    municipio?: string;       // Ex: "São Paulo", "Rio de Janeiro"
     tipoQuestao?: 'multipla_escolha' | 'certo_errado';
 }
 
@@ -164,14 +166,22 @@ export async function processExamAction(base64Data: string, mimeType: string = "
     4. **SUPPORT TEXTS**: 
        - 'associatedQuestions' MUST be a string representing the range or list (e.g., "1-5" or "10, 11"). 
        - DO NOT return it as an array.
-    5. **EXHAUSTIVE**: NO truncation. Output the FULL exam.
+    5. **TEXT FORMATTING (PRECISION IS MANDATORY)**: 
+       - Carefully observe the visual weight and style of the text in the PDF.
+       - **Bold**: If a phrase is visually **bold**, wrap it with \`**\`. Be careful not to miss keywords or emphasize entire paragraphs unless they are truly bold. 
+       - **IMPORTANT**: DO NOT treat text inside quotes (\`"text"\`) as bold unless it is explicitly and visually bold in the source document. Quotes should remain as plain text unless they meet the visual weight criteria.
+       - **Italic**: If text is *italics*, wrap it with \`*\`.
+       - **Underline**: If text is <u>underlined</u>, wrap it with \`__\`.
+       - **Strict Boundaries**: Formatting tags must be placed immediately adjacent to the text (e.g., \`**bold text**\`), never with internal spaces (e.g., \`** bold text **\`).
+       - Apply these rules meticulously to 'text' (questions), 'options', and 'content' (support texts).
+    6. **EXHAUSTIVE**: NO truncation. Output the FULL exam.
     
     Schema:
     {
       "title": string,
       "description": string,
       "course": string,
-      "metadata": { concurso, banca, cargo, nivel, disciplina, ano, tipoQuestao },
+      "metadata": { concurso, banca, cargo, nivel, disciplina, ano, estado, municipio, tipoQuestao },
       "supportTexts": [{ "id": string, "content": string, "associatedQuestions": string }],
       "questions": [{ "id": string, "text": string, "options": string[], "correctAnswer": string, "disciplina": string, "hasGraphic": boolean, "confidence": number }]
     }

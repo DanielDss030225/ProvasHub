@@ -230,6 +230,8 @@ function SendExamContent() {
                     disciplina: metadata.disciplina || examData.course || "",
                     areaDisciplina: metadata.areaDisciplina || "",
                     ano: metadata.ano || new Date().getFullYear(),
+                    estado: metadata.estado || "",
+                    municipio: metadata.municipio || "",
                     tipoQuestao: tipoQuestao,
 
                     // System metadata

@@ -1,11 +1,12 @@
 "use client";
 
 import { useAuth } from "../../../context/AuthContext";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
 import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft } from "lucide-react";
+import { FormattedText } from "../../components/FormattedText";
 import clsx from "clsx";
 
 interface QuestionBankItem {
@@ -25,6 +26,8 @@ interface QuestionBankItem {
     areaDisciplina?: string;
     supportText?: string;
     ano: number;
+    estado?: string;
+    municipio?: string;
     tipoQuestao: 'multipla_escolha' | 'certo_errado';
 }
 
@@ -35,6 +38,8 @@ interface FilterState {
     nivel: string;
     disciplina: string;
     ano: string;
+    estado: string;
+    municipio: string;
     tipoQuestao: string;
 }
 
@@ -45,7 +50,17 @@ const initialFilters: FilterState = {
     nivel: "",
     disciplina: "",
     ano: "",
+    estado: "",
+    municipio: "",
     tipoQuestao: "",
+};
+
+const normalizeText = (text: string) => {
+    return text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
 };
 
 export default function QuestionBankPage() {
@@ -54,6 +69,9 @@ export default function QuestionBankPage() {
 
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [visibleCount, setVisibleCount] = useState(20);
+    const [solveLimit, setSolveLimit] = useState(20);
+    const observerTarget = useRef<HTMLDivElement>(null);
     const [filters, setFilters] = useState<FilterState>(initialFilters);
     const [dynamicOptions, setDynamicOptions] = useState<{
         concursos: string[];
@@ -62,6 +80,8 @@ export default function QuestionBankPage() {
         niveis: string[];
         disciplinas: string[];
         anos: string[];
+        estados: string[];
+        municipios: string[];
         tipos: { label: string, value: string }[];
     }>({
         concursos: [],
@@ -70,6 +90,8 @@ export default function QuestionBankPage() {
         niveis: [],
         disciplinas: [],
         anos: [],
+        estados: [],
+        municipios: [],
         tipos: [
             { label: "Múltipla Escolha", value: "multipla_escolha" },
             { label: "Certo ou Errado", value: "certo_errado" }
@@ -97,6 +119,8 @@ export default function QuestionBankPage() {
             const niveis = new Set<string>();
             const disciplinas = new Set<string>();
             const anos = new Set<string>();
+            const estados = new Set<string>();
+            const municipios = new Set<string>();
 
             snapshot.docs.forEach(doc => {
                 const data = doc.data();
@@ -106,16 +130,32 @@ export default function QuestionBankPage() {
                 if (data.nivel) niveis.add(data.nivel);
                 if (data.disciplina) disciplinas.add(data.disciplina);
                 if (data.ano) anos.add(String(data.ano));
+                if (data.estado) estados.add(data.estado);
+                if (data.municipio) municipios.add(data.municipio);
             });
+
+            // Helper to title case and unify options
+            const unifyOptions = (set: Set<string>) => {
+                const map = new Map<string, string>();
+                Array.from(set).forEach(val => {
+                    const norm = normalizeText(val);
+                    if (!map.has(norm)) {
+                        map.set(norm, val); // Keep first occurrence as display label
+                    }
+                });
+                return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+            };
 
             setDynamicOptions(prev => ({
                 ...prev,
-                concursos: Array.from(concursos).sort(),
-                bancas: Array.from(bancas).sort(),
-                cargos: Array.from(cargos).sort(),
-                niveis: Array.from(niveis).sort(),
-                disciplinas: Array.from(disciplinas).sort(),
+                concursos: unifyOptions(concursos),
+                bancas: unifyOptions(bancas),
+                cargos: unifyOptions(cargos),
+                niveis: Array.from(niveis).sort(), // Levels are usually short and standardized
+                disciplinas: unifyOptions(disciplinas),
                 anos: Array.from(anos).sort((a, b) => Number(b) - Number(a)),
+                estados: unifyOptions(estados),
+                municipios: unifyOptions(municipios),
             }));
         } catch (e) {
             console.error("Error fetching dynamic options:", e);
@@ -133,58 +173,75 @@ export default function QuestionBankPage() {
         setLoading(true);
 
         try {
-            // We fetch the most recent questions and filter on the client for "contains" flexibility
-            let q = query(collection(db, "questions"), orderBy("createdAt", "desc"), limit(200));
+            // We fetch a larger batch and filter on the client for "contains" flexibility
+            let q = query(collection(db, "questions"), orderBy("createdAt", "desc"), limit(1000));
             const snapshot = await getDocs(q);
             let results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QuestionBankItem));
 
-            // Cumulative Filtering Logic (Contains/Substring check)
+            // Cumulative Filtering Logic (Case/Accent Insensitive)
             if (filters.concurso) {
+                const normFilter = normalizeText(filters.concurso);
                 results = results.filter(q =>
-                    q.concurso?.toLowerCase().includes(filters.concurso.toLowerCase())
+                    normalizeText(q.concurso || "").includes(normFilter)
                 );
             }
             if (filters.banca) {
+                const normFilter = normalizeText(filters.banca);
                 results = results.filter(q =>
-                    q.banca?.toLowerCase().includes(filters.banca.toLowerCase())
+                    normalizeText(q.banca || "").includes(normFilter)
                 );
             }
             if (filters.cargo) {
+                const normFilter = normalizeText(filters.cargo);
                 results = results.filter(q =>
-                    q.cargo?.toLowerCase().includes(filters.cargo.toLowerCase())
+                    normalizeText(q.cargo || "").includes(normFilter)
                 );
             }
             if (filters.nivel) {
+                const normFilter = normalizeText(filters.nivel);
                 results = results.filter(q =>
-                    q.nivel?.toLowerCase().includes(filters.nivel.toLowerCase())
+                    normalizeText(q.nivel || "").includes(normFilter)
                 );
             }
             if (filters.disciplina) {
+                const normFilter = normalizeText(filters.disciplina);
                 results = results.filter(q =>
-                    q.disciplina?.toLowerCase().includes(filters.disciplina.toLowerCase())
+                    normalizeText(q.disciplina || "").includes(normFilter)
                 );
             }
             if (filters.ano) {
                 results = results.filter(q => String(q.ano) === filters.ano);
             }
+            if (filters.estado) {
+                const normFilter = normalizeText(filters.estado);
+                results = results.filter(q =>
+                    normalizeText(q.estado || "").includes(normFilter)
+                );
+            }
+            if (filters.municipio) {
+                const normFilter = normalizeText(filters.municipio);
+                results = results.filter(q =>
+                    normalizeText(q.municipio || "").includes(normFilter)
+                );
+            }
             if (filters.tipoQuestao) {
                 results = results.filter(q => q.tipoQuestao === filters.tipoQuestao);
             }
 
-            // Global Text Search
+            // Global Text Search (Case/Accent Insensitive Tokens)
             if (searchQuery.trim()) {
-                const search = searchQuery.toLowerCase().trim();
-                const tokens = search.split(/\s+/).filter(Boolean);
+                const tokens = normalizeText(searchQuery).split(/\s+/).filter(Boolean);
 
                 results = results.filter(q => {
-                    const searchableText = [
+                    const searchableText = normalizeText([
                         q.text,
                         q.disciplina,
                         q.concurso,
                         q.banca,
                         q.cargo,
-                        q.examTitle
-                    ].filter(Boolean).join(" ").toLowerCase();
+                        q.examTitle,
+                        ...(q.options || [])
+                    ].filter(Boolean).join(" "));
 
                     return tokens.every(token => searchableText.includes(token));
                 });
@@ -201,7 +258,31 @@ export default function QuestionBankPage() {
     // Fetch and filter questions when filters or search change
     useEffect(() => {
         fetchAndFilterQuestions();
+        setVisibleCount(20);
     }, [fetchAndFilterQuestions]);
+
+    // Infinite Scroll Logic
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && questions.length > visibleCount) {
+                    setVisibleCount(prev => prev + 20);
+                }
+            },
+            { threshold: 0.1, rootMargin: '100px' }
+        );
+
+        const currentTarget = observerTarget.current;
+        if (currentTarget) {
+            observer.observe(currentTarget);
+        }
+
+        return () => {
+            if (currentTarget) {
+                observer.unobserve(currentTarget);
+            }
+        };
+    }, [questions.length, visibleCount]);
 
     const handleFilterChange = (key: keyof FilterState, value: string) => {
         setFilters(prev => ({ ...prev, [key]: value }));
@@ -215,6 +296,17 @@ export default function QuestionBankPage() {
     const hasActiveFilters = Object.values(filters).some(v => v !== "") || searchQuery.trim() !== "";
 
     const startSolving = () => {
+        // Save filtered questions to session storage so they can be picked up by the solve page
+        if (questions.length > 0) {
+            try {
+                // Slice based on user choice
+                const selectedQuestions = questions.slice(0, solveLimit);
+                sessionStorage.setItem('filtered_questions', JSON.stringify(selectedQuestions));
+            } catch (e) {
+                console.error("Error saving questions to sessionStorage:", e);
+            }
+        }
+
         const params = new URLSearchParams();
         Object.entries(filters).forEach(([key, value]) => {
             if (value) params.set(key, value);
@@ -283,17 +375,33 @@ export default function QuestionBankPage() {
                                 Banco de Questões
                             </h1>
                             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                {questions.length} questões disponíveis no filtro atual
+                                {visibleCount < questions.length ? (
+                                    <>Mostrando {visibleCount} de {questions.length} questões</>
+                                ) : (
+                                    <>{questions.length} questões encontradas</>
+                                )}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-800 p-1.5 pl-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+                            <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest shrink-0">Resolver:</span>
+                            <select
+                                value={solveLimit}
+                                onChange={(e) => setSolveLimit(Number(e.target.value))}
+                                className="bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-violet-500/10 outline-none transition-all cursor-pointer shadow-sm"
+                            >
+                                {[5, 10, 20, 50, 80, 100].map(n => (
+                                    <option key={n} value={n}>{n} questões</option>
+                                ))}
+                            </select>
+                        </div>
+
                         {questions.length > 0 && (
                             <button
                                 onClick={startSolving}
-                                className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-black transition shadow-lg shadow-violet-500/25 active:scale-95"
+                                className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-black transition shadow-lg shadow-violet-500/25 active:scale-95 whitespace-nowrap"
                             >
                                 <Play className="w-4 h-4" />
                                 RESOLVER AGORA
@@ -380,6 +488,20 @@ export default function QuestionBankPage() {
                                 placeholder="Qualquer ano"
                             />
                             <SelectFilter
+                                label="Estado (UF)"
+                                value={filters.estado}
+                                options={dynamicOptions.estados}
+                                onChange={(v) => handleFilterChange('estado', v)}
+                                placeholder="Todos os estados"
+                            />
+                            <SelectFilter
+                                label="Município"
+                                value={filters.municipio}
+                                options={dynamicOptions.municipios}
+                                onChange={(v) => handleFilterChange('municipio', v)}
+                                placeholder="Todos os municípios"
+                            />
+                            <SelectFilter
                                 label="Tipo"
                                 value={filters.tipoQuestao}
                                 options={dynamicOptions.tipos}
@@ -413,7 +535,7 @@ export default function QuestionBankPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {questions.map((question, idx) => (
+                        {questions.slice(0, visibleCount).map((question, idx) => (
                             <div
                                 key={question.id}
                                 className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-2xl hover:shadow-violet-500/5 hover:-translate-y-0.5 transition-all duration-300 cursor-default group"
@@ -440,9 +562,9 @@ export default function QuestionBankPage() {
 
                                 <div className="flex gap-6">
                                     <div className="flex-1 space-y-4">
-                                        <p className="text-slate-700 dark:text-slate-200 text-base leading-relaxed font-medium line-clamp-3">
-                                            {question.text}
-                                        </p>
+                                        <div className="text-slate-700 dark:text-slate-200 text-base leading-relaxed font-medium line-clamp-3">
+                                            <FormattedText text={question.text} />
+                                        </div>
 
                                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-4 border-t border-slate-50 dark:border-slate-800/20">
                                             {question.concurso && (
@@ -480,6 +602,16 @@ export default function QuestionBankPage() {
                                 </div>
                             </div>
                         ))}
+
+                        {/* Infinite Scroll Sentinel */}
+                        <div ref={observerTarget} className="h-10 w-full flex items-center justify-center">
+                            {visibleCount < questions.length && (
+                                <div className="flex items-center gap-2 text-slate-400 animate-pulse font-bold text-xs uppercase tracking-widest">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Carregando mais...
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </main>
