@@ -1,5 +1,15 @@
 "use server";
 
+import { resolve } from 'path';
+import { config } from 'dotenv';
+// Explicitly load .env.local with robust path resolution
+try {
+    const envPath = resolve(process.cwd(), '.env.local');
+    config({ path: envPath });
+} catch (e) {
+    console.error("Failed to load .env.local via dotenv:", e);
+}
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import JSON5 from 'json5';
 
@@ -18,128 +28,195 @@ export interface SupportText {
     associatedQuestions: string;
 }
 
+export interface ExamMetadata {
+    concurso?: string;        // Ex: "INSS 2024", "Polícia Federal 2023"
+    banca?: string;           // Ex: "CESPE/CEBRASPE", "FCC", "VUNESP"
+    cargo?: string;           // Ex: "Técnico do Seguro Social", "Delegado"
+    nivel?: string;           // Ex: "Superior", "Médio", "Fundamental"
+    disciplina?: string;      // Ex: "Português", "Matemática", "Direito"
+    areaDisciplina?: string;  // Ex: "Interpretação de Texto", "Constitucional"
+    ano?: number;             // Ex: 2024, 2023
+    tipoQuestao?: 'multipla_escolha' | 'certo_errado';
+}
+
 export interface ExamData {
     title: string;
     course: string;
     questions: Question[];
     supportTexts?: SupportText[];
+    metadata?: ExamMetadata;
 }
 
-// Helper to clean and parse JSON resiliently using JSON5
+/**
+ * Robustly parses AI-generated JSON by surgically repairing literal newlines 
+ * and structural glitches inside string values without corrupting JSON tokens.
+ */
 function cleanAndParseJSON(text: string): any {
-    let cleaned = text;
+    let raw = text.trim();
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        cleaned = jsonMatch[0];
+    // 1. Extract JSON block
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        raw = raw.substring(firstBrace, lastBrace + 1);
     } else {
-        cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        // Fallback: strip markdown fences
+        raw = raw.replace(/```json/g, "").replace(/```/g, "").trim();
     }
+
+    // 2. Surgical Repair Scanner
+    let result = "";
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < raw.length; i++) {
+        const char = raw[i];
+        const nextChar = raw[i + 1];
+
+        if (char === '"' && !escaped) {
+            if (inString) {
+                let foundBoundary = false;
+                for (let j = i + 1; j < Math.min(i + 20, raw.length); j++) {
+                    if (/\s/.test(raw[j])) continue;
+                    if (/[,\}\]:]/.test(raw[j])) {
+                        foundBoundary = true;
+                        break;
+                    }
+                    break;
+                }
+
+                if (foundBoundary) {
+                    inString = false;
+                    result += char;
+                } else {
+                    result += '\\"';
+                }
+            } else {
+                inString = true;
+                result += char;
+            }
+        } else if (inString) {
+            if (char === '\n' || char === '\r') {
+                result += '\\n';
+            } else if (char === '\\' && !escaped) {
+                if (/[btnfr"\\\/]/.test(nextChar) || nextChar === 'u') {
+                    result += char;
+                } else {
+                    result += '\\\\';
+                }
+            } else {
+                result += char;
+            }
+        } else {
+            result += char;
+        }
+
+        if (char === '\\' && !escaped) {
+            escaped = true;
+        } else {
+            escaped = false;
+        }
+    }
+
+    let cleaned = result.replace(/,\s*(\.\.\.|\(\s*\.\.\.\s*\)|…)/g, ",");
+    cleaned = cleaned.replace(/(\.\.\.|\(\s*\.\.\.\s*\)|…)\s*\]/g, "]");
+    cleaned = cleaned.replace(/(\.\.\.|\(\s*\.\.\.\s*\)|…)\s*\}/g, "}");
 
     try {
         return JSON5.parse(cleaned);
-    } catch (e) {
-        console.error("JSON5 parse failed. Raw text start:", cleaned.substring(0, 500));
+    } catch (e: any) {
+        console.error("=== JSON5 PARSE FAILED ===");
+        const line = e.lineNumber || 0;
+        const column = e.columnNumber || 0;
+        console.error(`At Line ${line}, Col ${column}: ${e.message}`);
         throw e;
     }
 }
 
 export async function processExamAction(base64Data: string, mimeType: string = "application/pdf"): Promise<ExamData> {
-    // Check multiple possible env var names
     const apiKey = process.env.GEMINI_API_KEY
         || process.env.NEXT_PUBLIC_GEMINI_API_KEY
         || process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
     if (!apiKey) {
-        console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes("GEMINI") || k.includes("API") || k.includes("GOOGLE")));
-        throw new Error("GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY=your_key to your .env.local file.");
+        throw new Error("Missing Gemini API Key. Please set GEMINI_API_KEY in your .env.local file.");
     }
 
-    // Initialize Gemini with the key
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
     }, {
-        timeout: 300000, // 5 minutes timeout for large PDFs
+        timeout: 300000,
     });
 
     const prompt = `
-    Analyze the following exam document (PDF/Image) which is in **Portuguese**.
-    Extract the structured data maintaining the original language (Portuguese) for titles, texts, and options.
+    Analyze this exam document (Portuguese).
+    Extract ALL questions and support texts.
     
-    **CRITICAL INSTRUCTIONS**:
-    1. **Structure**: Identify Title, Course, and **Support Texts**.
-       - **CRITICAL**: Search for support texts **throughout the entire document**, not just at the beginning.
-       - Look for texts interspersed between questions (e.g., "Leia o texto a seguir para responder as questões X a Y", "Texto para a questão 26").
-       - Extract these texts and link them to the correct questions in 'associatedQuestions'.
-    2. **Questions**: Extract all questions.
-       - **hasGraphic**: Set to true if the question refers to an image, graph, map, or figure (e.g., "observe a figura", "o gráfico mostra").
-    3. **Answer Key (Gabarito)**: Look for an answer key at the end of the document. If found, mark the 'correctAnswer' field for each question. If not found, try to infer or leave null.
-    4. **TEXT FORMATTING - VERY IMPORTANT**:
-       - Preserve text formatting using Markdown syntax:
-         - **Bold text** → use **text** (double asterisks)
-         - *Italic text* → use *text* (single asterisks)
-         - Underlined text → use <u>text</u> (HTML underline tag)
-       - Apply this to question texts, options, and support texts.
-       - This is crucial for maintaining the original exam appearance.
+    **CRITICAL RULES FOR EXTRACTION**:
+    1. **DESCRIPTION**: Generate a clear, concise summary of the exam (max 200 chars). Include total questions, main subjects, and level if possible.
+    2. **QUESTION TEXT**: Keep ONLY the prompt/question in the 'text' field. 
+       - **REMOVE** the answer options (A, B, C, D, E) from the 'text' field.
+       - The 'text' should end exactly where the options start.
+    3. **OPTIONS FORMAT**: The 'options' field MUST be an array of strings: \`["Option A content", "Option B content", ...]\`.
+       - DO NOT return options as an object.
+       - REMOVE the labels "A)", "B)", "( )", etc. from the content of the options.
+    4. **SUPPORT TEXTS**: 
+       - 'associatedQuestions' MUST be a string representing the range or list (e.g., "1-5" or "10, 11"). 
+       - DO NOT return it as an array.
+    5. **EXHAUSTIVE**: NO truncation. Output the FULL exam.
     
-    Return a valid JSON object with the following schema:
+    Schema:
     {
-      "title": "Titulo da Prova",
-      "course": "Nome da Disciplina",
-      "supportTexts": [
-        { "id": "Texto I", "content": "Full text with **formatting**...", "associatedQuestions": "1-3" }
-      ],
-      "questions": [
-        {
-          "id": "1",
-          "text": "Texto da questão com **negrito** e *itálico*...",
-          "options": ["a) Opção com **destaque**...", "b) ..."],
-          "correctAnswer": "a", 
-          "hasGraphic": true,
-          "confidence": 0.95
-        }
-      ]
+      "title": string,
+      "description": string,
+      "course": string,
+      "metadata": { concurso, banca, cargo, nivel, disciplina, ano, tipoQuestao },
+      "supportTexts": [{ "id": string, "content": string, "associatedQuestions": string }],
+      "questions": [{ "id": string, "text": string, "options": string[], "correctAnswer": string, "disciplina": string, "hasGraphic": boolean, "confidence": number }]
     }
-    
-    Ensure strict JSON output without markdown code fences. Escape all special characters in strings.
   `;
 
     try {
-        const part = {
-            inlineData: {
-                data: base64Data,
-                mimeType: mimeType
-            }
-        };
-
-        console.log("Sending payload to Gemini (Server Action)...");
-
-        let result;
-        let retries = 3;
-        while (retries > 0) {
-            try {
-                result = await model.generateContent([prompt, part]);
-                break;
-            } catch (e: any) {
-                if (e.message?.includes("503") || e.message?.includes("overloaded") || e.message?.includes("429")) {
-                    console.warn(`Model overloaded, retrying in 2s... (${retries} retries left)`);
-                    retries--;
-                    await new Promise(res => setTimeout(res, 2000));
-                } else {
-                    throw e;
-                }
-            }
-        }
-        if (!result) throw new Error("Failed to process exam after multiple retries due to server overload.");
-
-        console.log("Received response from Gemini");
+        const part = { inlineData: { data: base64Data, mimeType: mimeType } };
+        console.log("Requesting Gemini 2.5 Flash...");
+        const result = await model.generateContent([prompt, part]);
         const response = await result.response;
         const text = response.text();
 
-        return cleanAndParseJSON(text);
+        const data = cleanAndParseJSON(text);
+
+        // Post-processing to ensure data types match our interfaces exactly
+        if (data.supportTexts) {
+            data.supportTexts = data.supportTexts.map((st: any) => ({
+                ...st,
+                // Ensure associatedQuestions is always a string
+                associatedQuestions: Array.isArray(st.associatedQuestions)
+                    ? st.associatedQuestions.join(", ")
+                    : String(st.associatedQuestions || "")
+            }));
+        }
+
+        if (data.questions) {
+            data.questions = data.questions.map((q: any) => {
+                let normalizedOptions = [];
+                if (Array.isArray(q.options)) {
+                    normalizedOptions = q.options;
+                } else if (typeof q.options === 'object' && q.options !== null) {
+                    // Convert object {A: "...", B: "..."} to array ["...", "..."]
+                    normalizedOptions = Object.values(q.options);
+                }
+
+                return {
+                    ...q,
+                    options: normalizedOptions
+                };
+            });
+        }
+
+        return data;
     } catch (error) {
-        console.error("Error processing exam inside server action:", error);
+        console.error("Action Error:", error);
         throw error;
     }
 }

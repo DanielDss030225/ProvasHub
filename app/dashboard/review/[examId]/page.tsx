@@ -4,9 +4,9 @@ import { useAuth } from "../../../../context/AuthContext";
 import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db, storage } from "../../../../lib/firebase";
-import { doc, getDoc, updateDoc, runTransaction, increment } from "firebase/firestore";
+import { doc, getDoc, updateDoc, runTransaction, increment, collection, setDoc, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { Loader2, Save, ArrowLeft, AlertTriangle, FileText, Image as ImageIcon, Upload, CheckCircle, XCircle, Trash2, ExternalLink } from "lucide-react";
+import { Loader2, Save, ArrowLeft, AlertTriangle, FileText, Image as ImageIcon, Upload, CheckCircle, XCircle, Trash2, ExternalLink, Plus, Book, Zap } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 
@@ -30,6 +30,10 @@ export default function ReviewPage({ params }: PageProps) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    // Subjects Management
+    const [subjects, setSubjects] = useState<string[]>([]);
+    const [newSubject, setNewSubject] = useState("");
+
     // Graphic Upload State
     const [uploadingGraphicFor, setUploadingGraphicFor] = useState<number | null>(null);
     const [loadingImageFor, setLoadingImageFor] = useState<number | null>(null);
@@ -40,32 +44,20 @@ export default function ReviewPage({ params }: PageProps) {
     const [answerKeyResult, setAnswerKeyResult] = useState<AnswerKeyResult | null>(null);
     const answerKeyInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (!authLoading && !user) {
-            router.push("/");
-        } else if (user && examId) {
-            fetchExam(examId);
-        }
-    }, [user, authLoading, examId, router]);
-
     // --- Answer Key Parsers ---
     const parseAnswerKeyTXT = (content: string): Record<number, string> => {
         const result: Record<number, string> = {};
-        // Patterns: 1-A, 1.A, 1:A, 1) A, 1 A, Q1=A, etc.
         const patterns = [
-            /(\d+)\s*[-.:)=]\s*([A-Ea-e])/g,  // 1-A, 1.A, 1:A, 1)A, 1=A
-            /[Qq](\d+)\s*[-.:)=]?\s*([A-Ea-e])/g,  // Q1=A, Q1-A
-            /(\d+)\s+([A-Ea-e])(?:\s|$)/g,  // 1 A (space separated)
+            /(\d+)\s*[-.:)=]\s*([A-Ea-e])/g,
+            /[Qq](\d+)\s*[-.:)=]?\s*([A-Ea-e])/g,
+            /(\d+)\s+([A-Ea-e])(?:\s|$)/g,
         ];
-
         for (const pattern of patterns) {
             let match;
             while ((match = pattern.exec(content)) !== null) {
                 const questionNum = parseInt(match[1], 10);
                 const answer = match[2].toLowerCase();
-                if (!result[questionNum]) {
-                    result[questionNum] = answer;
-                }
+                if (!result[questionNum]) result[questionNum] = answer;
             }
         }
         return result;
@@ -74,20 +66,14 @@ export default function ReviewPage({ params }: PageProps) {
     const parseAnswerKeyCSV = (content: string): Record<number, string> => {
         const result: Record<number, string> = {};
         const lines = content.split(/\r?\n/).filter(line => line.trim());
-
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            // Skip header row if it contains text like "questão", "numero", etc.
             if (i === 0 && /quest[aã]o|numero|question|number/i.test(line)) continue;
-
-            // Split by comma, semicolon, or tab
             const parts = line.split(/[,;\t]/).map(p => p.trim());
             if (parts.length >= 2) {
                 const num = parseInt(parts[0], 10);
                 const answer = parts[1].match(/[A-Ea-e]/i)?.[0]?.toLowerCase();
-                if (!isNaN(num) && answer) {
-                    result[num] = answer;
-                }
+                if (!isNaN(num) && answer) result[num] = answer;
             }
         }
         return result;
@@ -96,28 +82,17 @@ export default function ReviewPage({ params }: PageProps) {
     const handleAnswerKeyUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !exam) return;
-
         setParsingAnswerKey(true);
         setAnswerKeyResult(null);
-
         try {
             const content = await file.text();
-            let parsed: Record<number, string> = {};
-
-            if (file.name.endsWith('.csv')) {
-                parsed = parseAnswerKeyCSV(content);
-            } else {
-                parsed = parseAnswerKeyTXT(content);
-            }
-
-            // Apply to questions
+            let parsed = file.name.endsWith('.csv') ? parseAnswerKeyCSV(content) : parseAnswerKeyTXT(content);
             const questions = [...exam.extractedData.questions];
             let matched = 0;
             let updated = 0;
             const errors: string[] = [];
-
             Object.entries(parsed).forEach(([numStr, answer]) => {
-                const idx = parseInt(numStr, 10) - 1; // Convert to 0-indexed
+                const idx = parseInt(numStr, 10) - 1;
                 if (idx >= 0 && idx < questions.length) {
                     matched++;
                     if (questions[idx].correctAnswer?.toLowerCase() !== answer) {
@@ -128,32 +103,84 @@ export default function ReviewPage({ params }: PageProps) {
                     errors.push(`Questão ${numStr} não encontrada`);
                 }
             });
-
+            const result = { matched, updated, total: Object.keys(parsed).length, errors };
             setExam({
                 ...exam,
-                extractedData: { ...exam.extractedData, questions }
+                extractedData: {
+                    ...exam.extractedData,
+                    questions,
+                    answerKeyResult: result
+                }
             });
-
-            setAnswerKeyResult({
-                matched,
-                updated,
-                total: Object.keys(parsed).length,
-                errors
-            });
-
+            setAnswerKeyResult(result);
         } catch (err: any) {
-            setAnswerKeyResult({
-                matched: 0,
-                updated: 0,
-                total: 0,
-                errors: [`Erro ao processar arquivo: ${err.message}`]
-            });
+            const result = { matched: 0, updated: 0, total: 0, errors: [`Erro: ${err.message}`] };
+            setAnswerKeyResult(result);
         } finally {
             setParsingAnswerKey(false);
-            if (answerKeyInputRef.current) {
-                answerKeyInputRef.current.value = '';
-            }
+            if (answerKeyInputRef.current) answerKeyInputRef.current.value = '';
         }
+    };
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push("/");
+        } else if (user && examId) {
+            fetchExam(examId);
+        }
+    }, [user, authLoading, examId, router]);
+
+    // Initialize subjects from exam data
+    useEffect(() => {
+        if (exam?.extractedData?.questions) {
+            const initialSubjects = new Set<string>();
+            if (exam.extractedData.course) initialSubjects.add(exam.extractedData.course);
+            exam.extractedData.questions.forEach((q: any) => {
+                if (q.disciplina) initialSubjects.add(q.disciplina);
+            });
+            setSubjects(Array.from(initialSubjects));
+        }
+    }, [exam]);
+
+    const addSubject = () => {
+        if (newSubject.trim() && !subjects.includes(newSubject.trim())) {
+            setSubjects([...subjects, newSubject.trim()]);
+            setNewSubject("");
+        }
+    };
+
+
+    const detectNivel = (text: string) => {
+        const lower = text.toLowerCase();
+        if (lower.includes("superior") || lower.includes("graduado") || lower.includes("analista") || lower.includes("especialista") || lower.includes("ensino superior")) return "Superior";
+        if (lower.includes("médio") || lower.includes("medio") || lower.includes("técnico") || lower.includes("tecnico") || lower.includes("ensino médio")) return "Médio";
+        if (lower.includes("fundamental") || lower.includes("alfabetizado") || lower.includes("ensino fundamental")) return "Fundamental";
+        return "";
+    };
+
+    const detectAno = (text: string) => {
+        const match = text.match(/\b(201[5-9]|202[0-9])\b/);
+        return match ? match[0] : "";
+    };
+
+    const detectDisciplina = (text: string) => {
+        const lower = text.toLowerCase();
+        if (lower.includes("português") || lower.includes("gramática") || lower.includes("interpretação de texto")) return "Língua Portuguesa";
+        if (lower.includes("matemática") || lower.includes("cálculo") || lower.includes("aritmética")) return "Matemática";
+        if (lower.includes("raciocínio lógico") || lower.includes("lógica")) return "Raciocínio Lógico-Matemático";
+        if (lower.includes("informática") || lower.includes("computador") || lower.includes("internet") || lower.includes("software")) return "Informática";
+        if (lower.includes("constitucional") || lower.includes("constituição")) return "Direito Constitucional";
+        if (lower.includes("administrativo") || lower.includes("administração pública")) return "Direito Administrativo";
+        if (lower.includes("penal") && !lower.includes("processual")) return "Direito Penal";
+        if (lower.includes("processual penal")) return "Direito Processual Penal";
+        if (lower.includes("civil") && !lower.includes("processual")) return "Direito Civil";
+        if (lower.includes("processual civil")) return "Direito Processual Civil";
+        if (lower.includes("ética")) return "Ética no Serviço Público";
+        if (lower.includes("atualidades")) return "Atualidades";
+        if (lower.includes("geografia")) return "Geografia";
+        if (lower.includes("história")) return "História";
+        if (lower.includes("inglês") || lower.includes("english")) return "Língua Inglesa";
+        return "";
     };
 
     const fetchExam = async (id: string) => {
@@ -163,14 +190,74 @@ export default function ReviewPage({ params }: PageProps) {
             if (docSnap.exists()) {
                 const examData = { id: docSnap.id, ...docSnap.data() } as { id: string; userId: string;[key: string]: any };
 
-                // Security Check: Only owner can review
                 if (user && user.uid !== examData.userId) {
                     showAlert("Acesso Negado: Apenas o autor pode editar esta prova.", "error", "Acesso Proibido");
                     router.push("/dashboard");
                     return;
                 }
 
-                setExam(examData);
+                // Try to detect Nivel and Ano from metadata or text
+                const detectedNivel = detectNivel(examData.fileName || "") ||
+                    detectNivel(examData.extractedData.title || "") ||
+                    detectNivel(examData.extractedData.course || "") ||
+                    examData.extractedData.metadata?.nivel || "";
+
+                const detectedAno = detectAno(examData.fileName || "") ||
+                    detectAno(examData.extractedData.title || "") ||
+                    examData.extractedData.metadata?.ano ||
+                    new Date().getFullYear();
+
+                // Ensure all questions have basic metadata fields
+                const questions = examData.extractedData.questions.map((q: any) => ({
+                    ...q,
+                    concurso: (q.concurso || examData.extractedData.metadata?.concurso || "").substring(0, 30),
+                    banca: q.banca || examData.extractedData.metadata?.banca || "",
+                    cargo: (q.cargo || examData.extractedData.metadata?.cargo || "").substring(0, 30),
+                    nivel: q.nivel || detectedNivel,
+                    ano: q.ano || detectedAno,
+                    tipoQuestao: q.tipoQuestao || examData.extractedData.metadata?.tipoQuestao || "multipla_escolha",
+                    disciplina: q.disciplina || detectDisciplina(q.text) || examData.extractedData.course || "",
+                    confidence: q.confidence || 1.0
+                }));
+
+                // Normalize support texts (ensure they use 'text' field)
+                const supportTexts = (examData.extractedData.supportTexts || []).map((st: any) => ({
+                    ...st,
+                    text: st.text || st.content || ""
+                }));
+
+                // Pre-fill title and description if missing
+                const metadata = examData.extractedData?.metadata || {};
+                const concurso = (metadata.concurso || "").substring(0, 30);
+                const banca = metadata.banca || "";
+                const ano = metadata.ano || detectedAno;
+                const course = examData.extractedData?.course || "";
+
+                const generatedDesc = examData.extractedData?.description ||
+                    [
+                        concurso,
+                        banca ? `(${banca})` : null,
+                        course,
+                        ano
+                    ].filter(Boolean).join(" - ");
+
+                const generatedTitle = examData.extractedData?.title ||
+                    (concurso ? `${concurso} - ${course}`.substring(0, 50) : (examData.fileName || "").replace(/\.[^/.]+$/, "") || "Nova Prova");
+
+                setExam({
+                    ...examData,
+                    extractedData: {
+                        ...examData.extractedData,
+                        title: generatedTitle,
+                        description: generatedDesc,
+                        questions,
+                        supportTexts
+                    }
+                });
+
+                if (examData.extractedData.answerKeyResult) {
+                    setAnswerKeyResult(examData.extractedData.answerKeyResult);
+                }
             } else {
                 showAlert("Prova não encontrada", "error", "Erro 404");
                 router.push("/dashboard");
@@ -184,124 +271,181 @@ export default function ReviewPage({ params }: PageProps) {
 
     const handleUpdate = async () => {
         if (!exam) return;
-        setSaving(true);
-        try {
-            // 1. Upload pending images first
-            const questions = [...exam.extractedData.questions];
-            let hasUploads = false;
 
-            for (let i = 0; i < questions.length; i++) {
-                const q = questions[i];
-                if (q.pendingFile) {
-                    hasUploads = true;
-                    try {
-                        const storageRef = ref(storage, `exam-graphics/${exam.id}/${i}_${Date.now()}`);
-                        await uploadBytes(storageRef, q.pendingFile);
-                        const downloadURL = await getDownloadURL(storageRef);
+        const hasKey = exam.extractedData.answerKeyResult || answerKeyResult;
 
-                        // Update question with real URL and remove pending file
-                        questions[i] = {
-                            ...q,
-                            graphicUrl: downloadURL,
-                            hasGraphic: true
-                        };
-                        delete questions[i].pendingFile;
-                    } catch (uploadErr) {
-                        console.error(`Failed to upload image for question ${i + 1}`, uploadErr);
-                        throw new Error(`Falha ao enviar imagem da questão ${i + 1}`);
+        const processSave = async () => {
+            setSaving(true);
+            try {
+                const questions = [...exam.extractedData.questions];
+                let hasUploads = false;
+
+                for (let i = 0; i < questions.length; i++) {
+                    const q = questions[i];
+                    if (q.pendingFile) {
+                        hasUploads = true;
+                        try {
+                            const storageRef = ref(storage, `exam-graphics/${exam.id}/${i}_${Date.now()}`);
+                            await uploadBytes(storageRef, q.pendingFile);
+                            const downloadURL = await getDownloadURL(storageRef);
+                            questions[i] = { ...q, graphicUrl: downloadURL, hasGraphic: true };
+                            delete questions[i].pendingFile;
+                        } catch (uploadErr) {
+                            throw new Error(`Falha ao enviar imagem da questão ${i + 1}`);
+                        }
                     }
                 }
-            }
 
-            if (hasUploads) {
-                setExam((prev: any) => ({
-                    ...prev,
-                    extractedData: { ...prev.extractedData, questions }
-                }));
-            }
+                await runTransaction(db, async (transaction) => {
+                    const examRef = doc(db, "exams", exam.id);
+                    const userRef = user ? doc(db, "users", user.uid) : null;
 
-            // 2. Save metadata to Firestore (Transaction)
-            const isFirstPublish = await runTransaction(db, async (transaction) => {
-                const examRef = doc(db, "exams", exam.id);
-                const examDoc = await transaction.get(examRef);
+                    // ALL READS FIRST
+                    const examDoc = await transaction.get(examRef);
+                    if (!examDoc.exists()) throw new Error("Prova não encontrada.");
 
-                if (!examDoc.exists()) {
-                    throw new Error("Prova não encontrada.");
-                }
+                    let userDoc = null;
+                    if (userRef) {
+                        userDoc = await transaction.get(userRef);
+                    }
 
-                // Only reward credits if status is changing from 'review_required' to 'ready'
-                // verifying first time publication
-                const currentStatus = examDoc.data().status;
-                const isFirst = currentStatus === 'review_required';
+                    const examDataDb = examDoc.data();
+                    const alreadyAwarded = examDataDb.creditsAwarded || false;
+                    const shouldAward = hasKey && !alreadyAwarded;
 
-                // PREPARE READS (Must be done before any writes)
-                let userRef;
-                let userDoc;
+                    // ALL WRITES SECOND
 
-                if (isFirst && user) {
-                    userRef = doc(db, "users", user.uid);
-                    userDoc = await transaction.get(userRef);
-                }
+                    // Update Main Exam
+                    transaction.update(examRef, {
+                        extractedData: { ...exam.extractedData, questions, answerKeyResult: answerKeyResult || exam.extractedData.answerKeyResult || null },
+                        status: "ready",
+                        creditsAwarded: alreadyAwarded || !!shouldAward
+                    });
 
-                // EXECUTE WRITES
-                // Update Exam (Use the potentially updated 'questions' array with new URLs)
-                transaction.update(examRef, {
-                    extractedData: { ...exam.extractedData, questions },
-                    status: "ready"
+                    // Build Support Text Map
+                    const questionSupportMap: Record<number, string> = {};
+                    if (exam.extractedData.supportTexts) {
+                        exam.extractedData.supportTexts.forEach((st: any) => {
+                            const rangeStr = st.associatedQuestions || "";
+                            const parts = rangeStr.split(/[,;]/);
+                            parts.forEach((part: string) => {
+                                const range = part.trim().split("-");
+                                if (range.length === 2) {
+                                    const start = parseInt(range[0]);
+                                    const end = parseInt(range[1]);
+                                    if (!isNaN(start) && !isNaN(end)) {
+                                        for (let n = start; n <= end; n++) {
+                                            questionSupportMap[n] = st.text || st.content || "";
+                                        }
+                                    }
+                                } else if (range.length === 1) {
+                                    const n = parseInt(range[0]);
+                                    if (!isNaN(n)) {
+                                        questionSupportMap[n] = st.text || st.content || "";
+                                    }
+                                }
+                            });
+                        });
+                    }
+
+                    // Update individual questions for Question Bank
+                    for (let i = 0; i < questions.length; i++) {
+                        const q = questions[i];
+                        const questionRef = doc(db, "questions", `${exam.id}_q${i}`);
+
+                        transaction.set(questionRef, {
+                            text: q.text,
+                            options: q.options || [],
+                            correctAnswer: q.correctAnswer || null,
+                            graphicUrl: q.graphicUrl || null,
+                            hasGraphic: q.hasGraphic || false,
+                            supportText: questionSupportMap[i + 1] || null,
+                            examId: exam.id,
+                            examTitle: exam.extractedData.title || exam.fileName,
+                            questionIndex: i,
+                            concurso: q.concurso || "",
+                            banca: q.banca || "",
+                            cargo: q.cargo || "",
+                            nivel: q.nivel || "",
+                            disciplina: q.disciplina || "",
+                            ano: Number(q.ano) || new Date().getFullYear(),
+                            tipoQuestao: q.tipoQuestao || "multipla_escolha",
+                            createdAt: Timestamp.now(),
+                            createdBy: user!.uid
+                        });
+                    }
+
+                    if (shouldAward && userRef && userDoc?.exists()) {
+                        transaction.update(userRef, { credits: increment(75) });
+                    }
                 });
 
-                if (isFirst && user && userRef && userDoc) {
-                    if (!userDoc.exists()) {
-                        // Initialize user with credits if missing (Recover account state)
-                        transaction.set(userRef, {
-                            email: user.email,
-                            displayName: user.displayName,
-                            photoURL: user.photoURL,
-                            credits: 175, // 100 initial + 75 reward
-                            createdAt: new Date(),
-                            lastLogin: new Date()
-                        });
-                    } else {
-                        transaction.update(userRef, {
-                            credits: increment(75)
-                        });
-                    }
-                }
-
-                return isFirst;
-            });
-
-            if (isFirstPublish) {
-                showAlert("Prova salva e publicada com sucesso! (+75 créditos)", "success", "Sucesso");
-            } else {
-                showAlert("Alterações salvas com sucesso!", "success", "Sucesso");
+                showAlert("Prova salva e Banco de Questões atualizado!", "success");
+                router.push(`/dashboard/solve/${exam.id}`);
+            } catch (e: any) {
+                console.error(e);
+                showAlert("Falha ao salvar: " + e.message, "error");
+            } finally {
+                setSaving(false);
             }
+        };
 
-            // Redirect to Resolution Mode immediately
-            router.push(`/dashboard/solve/${exam.id}`);
-        } catch (e: any) {
-            console.error(e);
-            showAlert("Falha ao salvar a prova. " + e.message, "error", "Erro ao Salvar");
-        } finally {
-            setSaving(false);
+        // Warning if no answer key, wait for confirmation
+        if (!hasKey) {
+            showAlert(
+                "Sua prova será salva, mas os 75 créditos de revisão só serão liberados quando você importar o gabarito oficial.",
+                "warning",
+                "Gabarito Pendente",
+                processSave // Proceed only after OK
+            );
+        } else {
+            processSave();
         }
     };
 
-    const updateSupportText = (index: number, content: string) => {
-        const newSupportTexts = [...exam.extractedData.supportTexts];
-        newSupportTexts[index] = { ...newSupportTexts[index], content };
+    const updateQuestion = (index: number, field: string, value: any) => {
+        const newQuestions = [...exam.extractedData.questions];
+
+        // Fields that should be synced across all questions automatically
+        const syncFields = ['concurso', 'banca', 'cargo', 'nivel', 'ano'];
+
+        if (syncFields.includes(field)) {
+            const finalValue = (field === 'concurso' || field === 'cargo') ? String(value).substring(0, 30) : value;
+            // Update the field for ALL questions
+            for (let i = 0; i < newQuestions.length; i++) {
+                newQuestions[i] = { ...newQuestions[i], [field]: finalValue };
+            }
+        } else {
+            // Standard individual update
+            newQuestions[index] = { ...newQuestions[index], [field]: value };
+        }
+
+        setExam({
+            ...exam,
+            extractedData: { ...exam.extractedData, questions: newQuestions }
+        });
+    };
+
+    const updateSupportText = (index: number, field: string, value: any) => {
+        const newSupportTexts = [...(exam.extractedData.supportTexts || [])];
+        newSupportTexts[index] = { ...newSupportTexts[index], [field]: value };
         setExam({
             ...exam,
             extractedData: { ...exam.extractedData, supportTexts: newSupportTexts }
         });
     };
 
-    const updateQuestion = (index: number, field: string, value: any) => {
-        const newQuestions = [...exam.extractedData.questions];
-        newQuestions[index] = { ...newQuestions[index], [field]: value };
+    const updateTitle = (value: string) => {
         setExam({
             ...exam,
-            extractedData: { ...exam.extractedData, questions: newQuestions }
+            extractedData: { ...exam.extractedData, title: value }
+        });
+    };
+
+    const updateDescription = (value: string) => {
+        setExam({
+            ...exam,
+            extractedData: { ...exam.extractedData, description: value }
         });
     };
 
@@ -317,118 +461,107 @@ export default function ReviewPage({ params }: PageProps) {
         const idx = uploadingGraphicFor;
         setLoadingImageFor(idx);
 
-        try {
-            // Read file locally for preview
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const previewUrl = event.target?.result as string;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const previewUrl = event.target?.result as string;
 
-                const newQuestions = [...exam.extractedData.questions];
-                newQuestions[idx] = {
-                    ...newQuestions[idx],
-                    graphicUrl: previewUrl, // Local preview
-                    hasGraphic: true,
-                    pendingFile: file // Store for later upload
-                };
-
-                setExam({
-                    ...exam,
-                    extractedData: { ...exam.extractedData, questions: newQuestions }
-                });
-
-                setLoadingImageFor(null);
-                setUploadingGraphicFor(null);
-            };
-            reader.readAsDataURL(file);
-
-        } catch (error: any) {
-            console.error("Error preparing graphic:", error);
-            showAlert("Erro ao preparar imagem: " + error.message, "error", "Erro");
-            setLoadingImageFor(null);
-            setUploadingGraphicFor(null);
-        } finally {
-            if (graphicInputRef.current) graphicInputRef.current.value = '';
-        }
-    };
-
-    const removeGraphic = async (index: number) => {
-        if (!exam) return;
-        const q = exam.extractedData.questions[index];
-        if (!q.graphicUrl) return;
-
-        if (!confirm("Deseja realmente remover esta imagem?")) return;
-
-        try {
-            // Just remove from local state
             const newQuestions = [...exam.extractedData.questions];
-
-            // If it was a pending file, we just drop it. 
-            // If it was a remote file, we mark it as removed (graphicUrl = null).
-            // We do NOT delete from storage here to keep "undo" potential until save (though our logic commits deletions on save by overwriting extractedData).
-
-            newQuestions[index] = {
-                ...newQuestions[index],
-                graphicUrl: null,
-                hasGraphic: false
+            newQuestions[idx] = {
+                ...newQuestions[idx],
+                graphicUrl: previewUrl,
+                hasGraphic: true,
+                pendingFile: file
             };
-            delete newQuestions[index].pendingFile;
 
             setExam({
                 ...exam,
                 extractedData: { ...exam.extractedData, questions: newQuestions }
             });
 
-        } catch (e) {
-            console.error(e);
-        }
+            setLoadingImageFor(null);
+            setUploadingGraphicFor(null);
+            if (graphicInputRef.current) graphicInputRef.current.value = "";
+        };
+        reader.readAsDataURL(file);
     };
 
-    if (authLoading || loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-violet-500" /></div>;
+    const removeGraphic = (index: number) => {
+        showAlert(
+            "Tem certeza que deseja remover esta imagem da questão?",
+            "warning",
+            "Remover Imagem",
+            () => {
+                const newQuestions = [...exam.extractedData.questions];
+                newQuestions[index] = {
+                    ...newQuestions[index],
+                    graphicUrl: null,
+                    hasGraphic: false
+                };
+                delete newQuestions[index].pendingFile;
+
+                setExam({
+                    ...exam,
+                    extractedData: {
+                        ...exam.extractedData,
+                        questions: newQuestions
+                    }
+                });
+
+                showAlert("Imagem removida com sucesso.", "success");
+            }
+        );
+    };
+
+    if (authLoading || loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-violet-500 w-10 h-10" /></div>;
     if (!exam) return null;
 
     return (
-        <div className="h-screen flex flex-col bg-white dark:bg-slate-900 overflow-hidden transition-colors duration-300">
+        <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden transition-colors">
             {/* Header */}
-            <div className="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 bg-white dark:bg-slate-900 z-10 transition-colors">
+            <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-20 shrink-0">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => router.back()} className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+                    <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition text-slate-500">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <h1 className="font-semibold text-lg text-slate-800 dark:text-white">Revisão: {exam.fileName}</h1>
-                    <span className="bg-violet-100 text-violet-700 text-xs px-2 py-0.5 rounded-full font-medium">
-                        {exam.status === 'review_required' ? 'Modo Revisão' : 'Modo Visualização'}
-                    </span>
+                    <div>
+                        <h1 className="font-bold text-slate-800 dark:text-white leading-none">Revisão de Prova</h1>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate max-w-[300px]">{exam.extractedData?.title || exam.fileName}</p>
+                    </div>
                 </div>
-                <button
-                    onClick={handleUpdate}
-                    disabled={saving}
-                    className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg hover:bg-violet-700 transition disabled:opacity-50"
-                >
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Salvar e Finalizar
-                </button>
-            </div>
 
-            {/* Split View */}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleUpdate}
+                        disabled={saving}
+                        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-xl font-bold transition disabled:opacity-50 shadow-lg shadow-violet-500/20 active:scale-95"
+                    >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        SALVAR E FINALIZAR
+                    </button>
+                </div>
+            </header>
+
             <div className="flex-1 flex overflow-hidden">
-                {/* Left Panel: Answer Key Upload */}
-                <div className="w-1/2 bg-slate-800 dark:bg-slate-950 p-8 flex flex-col items-center justify-center border-r border-slate-700">
-                    <div className="w-full max-w-md space-y-6">
-                        {/* Header */}
-                        <div className="text-center">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-violet-500/20 mb-4">
-                                <Upload className="w-8 h-8 text-violet-400" />
-                            </div>
-                            <h3 className="text-xl font-bold text-white mb-2">Importar Gabarito</h3>
-                            <p className="text-sm text-slate-400">
-                                Envie um arquivo com o gabarito oficial para corrigir automaticamente as respostas.
-                            </p>
+                {/* Left Panel: Global Config */}
+                <aside className="w-[380px] border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 overflow-y-auto space-y-8 scrollbar-hide">
+                    {/* Answer Key Upload */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-slate-800 dark:text-white">
+                            <Upload className="w-5 h-5 text-violet-500" />
+                            <h2 className="font-bold uppercase text-xs tracking-widest">Importar Gabarito</h2>
                         </div>
-
-                        {/* Upload Area */}
+                        {!answerKeyResult && !parsingAnswerKey && (
+                            <div className="flex items-center gap-2 p-2 px-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-tighter animate-pulse">
+                                <AlertTriangle className="w-3 h-3" />
+                                Gabarito Pendente
+                            </div>
+                        )}
                         <div
                             onClick={() => answerKeyInputRef.current?.click()}
-                            className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-violet-500 hover:bg-slate-700/50 transition"
+                            className={clsx(
+                                "group relative border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all",
+                                !answerKeyResult ? "border-amber-200 bg-amber-50/30 dark:border-amber-900/40 hover:border-violet-500" : "border-slate-200 dark:border-slate-700 hover:border-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/10"
+                            )}
                         >
                             <input
                                 ref={answerKeyInputRef}
@@ -438,253 +571,334 @@ export default function ReviewPage({ params }: PageProps) {
                                 className="hidden"
                             />
                             {parsingAnswerKey ? (
-                                <Loader2 className="w-8 h-8 text-violet-400 mx-auto animate-spin" />
+                                <Loader2 className="w-6 h-6 text-violet-500 mx-auto animate-spin" />
                             ) : (
                                 <>
-                                    <Upload className="w-8 h-8 text-slate-500 mx-auto mb-3" />
-                                    <p className="text-slate-300 font-medium">Clique para enviar</p>
-                                    <p className="text-xs text-slate-500 mt-1">Formatos: .txt, .csv</p>
+                                    <div className={clsx(
+                                        "w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-3 transition-transform group-hover:scale-110",
+                                        !answerKeyResult ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-500" : "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+                                    )}>
+                                        <Plus className="w-5 h-5" />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                                        {answerKeyResult ? "Trocar Gabarito" : "Carregar Gabarito"}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-black">Padrão: 1-A, 1:B, 1.C</p>
                                 </>
                             )}
                         </div>
 
-                        {/* Supported formats */}
-                        <div className="text-center">
-                            <p className="text-xs text-slate-500">Padrões aceitos:</p>
-                            <p className="text-xs text-slate-400 font-mono mt-1">1-A, 1.A, 1:A, Q1=A</p>
-                        </div>
-
-                        {/* Results */}
                         {answerKeyResult && (
                             <div className={clsx(
-                                "p-4 rounded-lg text-sm",
-                                answerKeyResult.errors.length > 0 && answerKeyResult.matched === 0
-                                    ? "bg-red-500/20 border border-red-500/30"
-                                    : "bg-violet-500/20 border border-violet-500/30"
+                                "p-3 rounded-xl border text-[11px] font-medium leading-relaxed",
+                                answerKeyResult.updated > 0 ? "bg-emerald-50 border-emerald-100 text-emerald-700 dark:bg-emerald-900/10 dark:border-emerald-900/30 dark:text-emerald-400" : "bg-slate-50 border-slate-100 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400"
                             )}>
-                                <div className="flex items-center gap-2 mb-2 font-semibold">
-                                    {answerKeyResult.updated > 0 ? (
-                                        <CheckCircle className="w-4 h-4 text-violet-400" />
-                                    ) : (
-                                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                                    )}
-                                    <span className={answerKeyResult.updated > 0 ? "text-violet-300" : "text-amber-300"}>
-                                        {answerKeyResult.updated > 0
-                                            ? `${answerKeyResult.updated} resposta(s) corrigida(s)!`
-                                            : "Nenhuma alteração necessária"
-                                        }
-                                    </span>
+                                <div className="flex items-center gap-2 mb-1.5 font-bold uppercase tracking-tighter">
+                                    {answerKeyResult.updated > 0 ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                                    {answerKeyResult.updated > 0 ? "Gabarito Aplicado!" : "Escaneamento Concluído"}
                                 </div>
-                                <div className="text-xs text-slate-400 space-y-1">
-                                    <p>• {answerKeyResult.total} resposta(s) encontrada(s)</p>
-                                    <p>• {answerKeyResult.matched} correspondência(s)</p>
-                                    {answerKeyResult.errors.length > 0 && (
-                                        <div className="text-red-400 mt-2">
-                                            {answerKeyResult.errors.slice(0, 3).map((err, i) => (
-                                                <p key={i}>⚠ {err}</p>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                <p>• Encontrado: {answerKeyResult.total}</p>
+                                <p>• Vinculado: {answerKeyResult.matched}</p>
+                                <p className="font-bold underline decoration-emerald-500/30">• Necessário Correção: {answerKeyResult.updated}</p>
+                                {answerKeyResult.errors.length > 0 && <p className="text-red-500 mt-1 font-bold">⚠ {answerKeyResult.errors[0]}</p>}
                             </div>
                         )}
                     </div>
-                </div>
 
-                {/* Right Panel: Editor */}
-                <div className="w-1/2 bg-slate-50 dark:bg-slate-950 overflow-y-auto p-8 pb-32 transition-colors">
-                    <div className="max-w-2xl mx-auto space-y-8">
-                        {/* Hidden Graphic Input */}
-                        <input
-                            type="file"
-                            ref={graphicInputRef}
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleGraphicUpload}
-                        />
+                    {/* Subjects Manager */}
+                    <div className="space-y-4 pt-8 border-t border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2 text-slate-800 dark:text-white">
+                            <Book className="w-5 h-5 text-violet-500" />
+                            <h2 className="font-bold uppercase text-xs tracking-widest">Disciplinas da Prova</h2>
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={newSubject}
+                                onChange={(e) => setNewSubject(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && addSubject()}
+                                placeholder="Ex: Português..."
+                                className="flex-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-violet-500/20 transition-all outline-none"
+                            />
+                            <button onClick={addSubject} className="p-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition">
+                                <Plus className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {subjects.map((s, i) => (
+                                <span key={i} className="px-3 py-1.5 bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 rounded-lg text-xs font-bold border border-violet-100 dark:border-violet-900/30 flex items-center gap-2 group">
+                                    {s}
+                                    <button onClick={() => setSubjects(subjects.filter(sub => sub !== s))} className="hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <XCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
 
-                        {/* Support Texts */}
-                        {exam.extractedData?.supportTexts && exam.extractedData.supportTexts.length > 0 && (
-                            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800 shadow-sm space-y-4">
-                                <h3 className="font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-2">
-                                    <FileText className="w-5 h-5" />
-                                    Textos de Apoio
-                                </h3>
-                                <div className="space-y-4">
-                                    {exam.extractedData.supportTexts.map((text: any, idx: number) => (
-                                        <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-blue-100 dark:border-blue-900 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="font-bold text-blue-600">{text.id}</span>
-                                                <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded">Questões: {text.associatedQuestions}</span>
-                                            </div>
-                                            <textarea
-                                                value={text.content}
-                                                onChange={(e) => updateSupportText(idx, e.target.value)}
-                                                className="w-full min-h-[100px] p-2 rounded border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800 text-slate-800 dark:text-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500"
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                    <div className="pt-8 border-t border-slate-100 dark:border-slate-800">
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 rounded-2xl">
+                            <h4 className="text-amber-800 dark:text-amber-400 font-bold text-xs flex items-center gap-2 mb-2">
+                                <AlertTriangle className="w-4 h-4" />
+                                AJUDA RÁPIDA
+                            </h4>
+                            <p className="text-[11px] text-amber-700 dark:text-amber-500 leading-relaxed font-medium">
+                                Vincule cada questão a uma disciplina da lista ao lado. Os dados da prova (Banca, Cargo, Concurso, etc) são **sincronizados automaticamente** em todas as questões ao serem editados.
+                            </p>
+                        </div>
+                    </div>
+                </aside>
 
-                        {/* Exam Meta */}
-                        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Título da Prova</label>
+                {/* Main Editor */}
+                <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 p-8 scrollbar-hide pb-32">
+                    <div className="max-w-4xl mx-auto space-y-8">
+                        {/* Exam Header Info */}
+                        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-400 px-1">Título da Prova</label>
                                 <input
+                                    type="text"
                                     value={exam.extractedData?.title || ""}
-                                    onChange={(e) => setExam({ ...exam, extractedData: { ...exam.extractedData, title: e.target.value } })}
-                                    className="w-full text-xl font-bold text-slate-900 dark:text-white border-none p-0 focus:ring-0 placeholder:text-slate-300 dark:bg-transparent"
-                                    placeholder="Digite o título..."
+                                    onChange={(e) => updateTitle(e.target.value)}
+                                    placeholder="Ex: PMMG - Soldado 2024"
+                                    className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl px-6 py-4 text-xl font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500/20 transition-all"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Disciplina</label>
-                                <input
-                                    value={exam.extractedData?.course || ""}
-                                    onChange={(e) => setExam({ ...exam, extractedData: { ...exam.extractedData, course: e.target.value } })}
-                                    className="w-full text-base font-medium text-slate-700 dark:text-slate-300 border-none p-0 focus:ring-0 placeholder:text-slate-300 dark:bg-transparent"
-                                    placeholder="Digite a disciplina..."
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Descrição / Observações</label>
+                                <textarea
+                                    value={exam.extractedData?.description || ""}
+                                    onChange={(e) => updateDescription(e.target.value)}
+                                    placeholder="Adicione detalhes sobre a prova, banca ou requisitos..."
+                                    className="w-full min-h-[100px] bg-slate-50 dark:bg-slate-800/50 border-none rounded-2xl px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-violet-500/20 transition-all resize-none"
                                 />
                             </div>
                         </div>
 
-                        {/* Questions */}
-                        <div className="space-y-6">
-                            {exam.extractedData?.questions?.map((q: any, idx: number) => (
-                                <div key={idx} className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition group hover:border-violet-300 dark:hover:border-violet-700">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold px-2 py-1 rounded">Q{idx + 1}</span>
+                        {/* Support Texts Section */}
+                        {exam.extractedData?.supportTexts && exam.extractedData.supportTexts.length > 0 && (
+                            <div className="space-y-6 mb-12">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <FileText className="w-5 h-5 text-violet-500" />
+                                    <h2 className="font-black text-slate-800 dark:text-white uppercase tracking-wider text-sm">Textos de Apoio</h2>
+                                </div>
+                                {exam.extractedData.supportTexts.map((st: any, idx: number) => (
+                                    <div key={idx} className="bg-amber-50/50 dark:bg-amber-900/5 border border-amber-100 dark:border-amber-900/20 rounded-3xl p-6 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] font-black uppercase bg-amber-200 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 px-3 py-1 rounded-full">
+                                                Texto de Apoio #{idx + 1}
+                                            </span>
                                             <div className="flex items-center gap-2">
-                                                {q.hasGraphic && (
-                                                    <span className="bg-purple-100 text-purple-700 text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1">
-                                                        <ImageIcon className="w-3 h-3" />
-                                                        Contém Imagem
-                                                    </span>
-                                                )}
-
-                                                {!q.graphicUrl && (
-                                                    <button
-                                                        onClick={() => triggerGraphicUpload(idx)}
-                                                        className="text-slate-500 hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400 transition flex items-center gap-1.5 text-xs font-medium"
-                                                        title="Adicionar Gráfico/Imagem"
-                                                    >
-                                                        <ImageIcon className="w-4 h-4" />
-                                                        <span>Adicione Gráfico</span>
-                                                    </button>
-                                                )}
-
-                                                {loadingImageFor === idx && (
-                                                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs px-2 py-1 rounded-full">
-                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                        <span>Carregando...</span>
-                                                    </div>
-                                                )}
-
-                                                {q.graphicUrl && !loadingImageFor && (
-                                                    <div className="flex items-center gap-1 group/img-actions">
-                                                        <div className="relative group/preview cursor-pointer">
-                                                            <a href={q.graphicUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 bg-violet-50 text-violet-600 px-2 py-1 rounded-full text-xs font-medium hover:bg-violet-100">
-                                                                <ImageIcon className="w-3 h-3" />
-                                                                Ver Imagem
-                                                            </a>
-                                                            <div className="absolute bottom-full left-0 mb-2 hidden group-hover/preview:block z-20">
-                                                                <img src={q.graphicUrl} alt="Preview" className="max-w-[200px] max-h-[150px] rounded-lg border border-slate-200 shadow-xl bg-white" />
-                                                            </div>
-                                                        </div>
-
-                                                        <button
-                                                            onClick={() => triggerGraphicUpload(idx)}
-                                                            className="p-1 text-slate-400 hover:text-orange-500"
-                                                            title="Trocar imagem"
-                                                        >
-                                                            <Upload className="w-3 h-3" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => removeGraphic(idx)}
-                                                            className="p-1 text-slate-400 hover:text-red-500"
-                                                            title="Remover imagem"
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                <label className="text-[10px] font-black uppercase text-amber-600/60 dark:text-amber-500/40">Questões:</label>
+                                                <input
+                                                    type="text"
+                                                    value={st.associatedQuestions || ""}
+                                                    onChange={(e) => updateSupportText(idx, 'associatedQuestions', e.target.value)}
+                                                    placeholder="ex: 1-5"
+                                                    className="w-20 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/30 rounded-lg px-2 py-1 text-xs font-bold text-amber-900 dark:text-amber-200 outline-none focus:ring-2 focus:ring-amber-500/20"
+                                                />
                                             </div>
                                         </div>
-                                        {q.confidence < 0.8 && (
-                                            <div className="flex items-center gap-1 text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-full">
-                                                <AlertTriangle className="w-3 h-3" />
-                                                Baixa Confiança ({(q.confidence * 100).toFixed(0)}%)
-                                            </div>
-                                        )}
+                                        <textarea
+                                            value={st.text}
+                                            onChange={(e) => updateSupportText(idx, 'text', e.target.value)}
+                                            className="w-full min-h-[100px] bg-transparent border-none p-0 text-slate-700 dark:text-slate-300 text-sm leading-relaxed font-medium focus:ring-0 placeholder:text-slate-300 resize-y"
+                                            placeholder="Conteúdo do texto de apoio..."
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mb-4">
+                            <Book className="w-5 h-5 text-violet-500" />
+                            <h2 className="font-black text-slate-800 dark:text-white uppercase tracking-wider text-sm">Questões Extraídas</h2>
+                        </div>
+
+                        {exam.extractedData?.questions?.map((q: any, idx: number) => (
+                            <div key={idx} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden group hover:border-violet-300 dark:hover:border-violet-700 transition-all duration-300">
+                                {/* Question Header */}
+                                <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-8 h-8 flex items-center justify-center bg-violet-600 text-white rounded-xl text-xs font-black">
+                                            Q{idx + 1}
+                                        </span>
+                                        <select
+                                            value={q.disciplina || ""}
+                                            onChange={(e) => updateQuestion(idx, 'disciplina', e.target.value)}
+                                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-violet-500/20 outline-none w-[250px]"
+                                        >
+                                            <option value="">Selecione a Disciplina</option>
+                                            {subjects.map((s, i) => (
+                                                <option key={i} value={s} title={s}>
+                                                    {s.length > 30 ? s.substring(0, 30) + '...' : s}
+                                                </option>
+                                            ))}
+                                            <option value="custom">+ Adicionar Outra</option>
+                                        </select>
                                     </div>
 
+                                    <div className="flex items-center gap-2">
+                                        {q.graphicUrl && (
+                                            <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                                                <img src={q.graphicUrl} className="w-full h-full object-cover" alt="Thumb" />
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={() => triggerGraphicUpload(idx)}
+                                            disabled={loadingImageFor === idx}
+                                            className={clsx(
+                                                "p-2 rounded-lg transition",
+                                                q.hasGraphic ? "text-violet-600 bg-violet-50" : "text-slate-400 hover:text-violet-500 hover:bg-violet-50"
+                                            )}
+                                        >
+                                            {loadingImageFor === idx ? (
+                                                <Loader2 className="w-5 h-5 animate-spin" />
+                                            ) : (
+                                                <ImageIcon className="w-5 h-5" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-8 space-y-6">
+                                    {/* Content Editor */}
                                     <textarea
                                         value={q.text}
                                         onChange={(e) => updateQuestion(idx, 'text', e.target.value)}
-                                        className="w-full min-h-[100px] p-2 rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm focus:border-violet-500 focus:ring-violet-500"
+                                        className="w-full min-h-[120px] bg-transparent border-none p-0 text-slate-800 dark:text-slate-200 text-base leading-relaxed font-medium focus:ring-0 placeholder:text-slate-300 resize-y"
+                                        placeholder="Texto da questão..."
+                                        onInput={(e) => {
+                                            const target = e.target as HTMLTextAreaElement;
+                                            target.style.height = 'auto';
+                                            target.style.height = target.scrollHeight + 'px';
+                                        }}
                                     />
 
-                                    {/* Inline Image Preview */}
+                                    {/* Image Preview if exists */}
                                     {q.graphicUrl && (
-                                        <div className="mt-2 mb-4">
-                                            <div className="relative inline-block group">
-                                                <img
-                                                    src={q.graphicUrl}
-                                                    alt="Questão visual"
-                                                    className="max-h-[200px] rounded-lg border border-slate-200 dark:border-slate-700 hover:opacity-90 transition cursor-zoom-in"
-                                                    onClick={() => window.open(q.graphicUrl, '_blank')}
-                                                />
-                                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                                                    <button onClick={() => triggerGraphicUpload(idx)} className="p-1.5 bg-white/90 rounded-full shadow-sm hover:text-orange-600 transition" title="Trocar"><Upload className="w-4 h-4" /></button>
-                                                    <button onClick={() => removeGraphic(idx)} className="p-1.5 bg-white/90 rounded-full shadow-sm hover:text-red-600 transition" title="Remover"><Trash2 className="w-4 h-4" /></button>
-                                                </div>
-                                            </div>
+                                        <div className="relative inline-block mt-2">
+                                            <img src={q.graphicUrl} className="max-h-[300px] rounded-2xl border-4 border-slate-100 dark:border-slate-800 shadow-lg" alt="Preview" />
+                                            <button onClick={() => removeGraphic(idx)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition">
+                                                <XCircle className="w-4 h-4" />
+                                            </button>
                                         </div>
                                     )}
 
-                                    <div className="mt-4 space-y-2 pl-4 border-l-2 border-slate-100 dark:border-slate-800">
+                                    {/* Options Editor */}
+                                    <div className="grid grid-cols-1 gap-3 pt-4 border-t border-slate-50 dark:border-slate-800/50">
                                         {q.options?.map((opt: string, optIdx: number) => {
-                                            const optionLetter = String.fromCharCode(97 + optIdx); // 'a', 'b', etc.
-                                            const isCorrect = q.correctAnswer?.toLowerCase() === optionLetter;
-
+                                            const letter = String.fromCharCode(97 + optIdx);
+                                            const isCorrect = q.correctAnswer?.toLowerCase() === letter;
                                             return (
                                                 <div key={optIdx} className={clsx(
-                                                    "flex items-center gap-3 p-2 rounded-lg transition",
-                                                    isCorrect ? "bg-green-50 dark:bg-green-900/20" : "hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                    "flex items-center gap-4 p-3 rounded-2xl border transition-all duration-300",
+                                                    isCorrect ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800" : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700"
                                                 )}>
-                                                    <div
-                                                        onClick={() => updateQuestion(idx, 'correctAnswer', optionLetter)}
+                                                    <button
+                                                        onClick={() => updateQuestion(idx, 'correctAnswer', letter)}
                                                         className={clsx(
-                                                            "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border cursor-pointer transition shrink-0",
-                                                            isCorrect
-                                                                ? "bg-green-500 border-green-500 text-white shadow-sm ring-2 ring-green-200 ring-offset-1 dark:ring-offset-slate-900"
-                                                                : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400 hover:border-slate-400 dark:hover:border-slate-500"
-                                                        )}>
-                                                        {String.fromCharCode(65 + optIdx)}
-                                                    </div>
-                                                    <input
+                                                            "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black transition-all",
+                                                            isCorrect ? "bg-green-500 text-white shadow-lg shadow-green-500/20 scale-110" : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                                                        )}
+                                                    >
+                                                        {letter.toUpperCase()}
+                                                    </button>
+                                                    <textarea
                                                         value={opt}
                                                         onChange={(e) => {
-                                                            const newOptions = [...q.options];
-                                                            newOptions[optIdx] = e.target.value;
-                                                            updateQuestion(idx, 'options', newOptions);
+                                                            const o = [...q.options];
+                                                            o[optIdx] = e.target.value;
+                                                            updateQuestion(idx, 'options', o);
                                                         }}
-                                                        className="flex-1 bg-transparent border-none text-sm text-slate-600 dark:text-slate-300 focus:ring-0 p-0"
+                                                        rows={1}
+                                                        className="flex-1 bg-transparent border-none text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-0 p-0 resize-y min-h-[24px]"
+                                                        onInput={(e) => {
+                                                            const target = e.target as HTMLTextAreaElement;
+                                                            target.style.height = 'auto';
+                                                            target.style.height = target.scrollHeight + 'px';
+                                                        }}
                                                     />
-                                                    {isCorrect && <span className="text-xs font-bold text-green-600">Correta</span>}
                                                 </div>
                                             );
                                         })}
                                     </div>
+
+                                    {/* Question Metadata Form */}
+                                    <div className="pt-6 mt-6 border-t border-slate-50 dark:border-slate-800/50 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Concurso</label>
+                                            <input
+                                                value={q.concurso || ""}
+                                                onChange={(e) => updateQuestion(idx, 'concurso', e.target.value)}
+                                                maxLength={30}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Banca</label>
+                                            <input
+                                                value={q.banca || ""}
+                                                onChange={(e) => updateQuestion(idx, 'banca', e.target.value)}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Cargo</label>
+                                            <input
+                                                value={q.cargo || ""}
+                                                onChange={(e) => updateQuestion(idx, 'cargo', e.target.value)}
+                                                maxLength={30}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Nível</label>
+                                            <select
+                                                value={q.nivel || ""}
+                                                onChange={(e) => updateQuestion(idx, 'nivel', e.target.value)}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            >
+                                                <option value="">Selecione</option>
+                                                <option value="Fundamental">Fundamental</option>
+                                                <option value="Médio">Médio</option>
+                                                <option value="Superior">Superior</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Ano</label>
+                                            <select
+                                                value={q.ano || ""}
+                                                onChange={(e) => updateQuestion(idx, 'ano', e.target.value)}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            >
+                                                <option value="">Selecione</option>
+                                                {Array.from({ length: new Date().getFullYear() - 2014 }, (_, i) => 2015 + i).reverse().map(year => (
+                                                    <option key={year} value={year}>{year}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Tipo</label>
+                                            <select
+                                                value={q.tipoQuestao || ""}
+                                                onChange={(e) => updateQuestion(idx, 'tipoQuestao', e.target.value)}
+                                                className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none"
+                                            >
+                                                <option value="multipla_escolha">Múltipla Escolha</option>
+                                                <option value="certo_errado">Certo ou Errado</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
-                </div>
+                </main>
             </div>
+
+            {/* Hidden Input for Graphics */}
+            <input type="file" ref={graphicInputRef} accept="image/*" className="hidden" onChange={handleGraphicUpload} />
         </div>
     );
 }

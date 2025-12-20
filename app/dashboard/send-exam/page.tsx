@@ -166,10 +166,80 @@ function SendExamContent() {
                     createdAt: Timestamp.now()
                 });
             }
+
+            // Save individual questions to the 'questions' collection for the Question Bank
+            const questions = examData.questions || [];
+            const metadata = examData.metadata || {};
+
+            // Build Support Text Map
+            const questionSupportMap: Record<number, string> = {};
+            if (examData.supportTexts) {
+                examData.supportTexts.forEach((st: any) => {
+                    const rangeStr = st.associatedQuestions || "";
+                    const parts = rangeStr.split(/[,;]/);
+                    parts.forEach((part: string) => {
+                        const range = part.trim().split("-");
+                        if (range.length === 2) {
+                            const start = parseInt(range[0]);
+                            const end = parseInt(range[1]);
+                            if (!isNaN(start) && !isNaN(end)) {
+                                for (let n = start; n <= end; n++) {
+                                    questionSupportMap[n] = st.text || st.content || "";
+                                }
+                            }
+                        } else if (range.length === 1) {
+                            const n = parseInt(range[0]);
+                            if (!isNaN(n)) {
+                                questionSupportMap[n] = st.text || st.content || "";
+                            }
+                        }
+                    });
+                });
+            }
+
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                const questionRef = doc(collection(db, "questions"));
+
+                // Detect question type based on options or metadata
+                const tipoQuestao = metadata.tipoQuestao ||
+                    (q.options?.length === 2 &&
+                        q.options.some((opt: string) => /certo|errado/i.test(opt))
+                        ? 'certo_errado'
+                        : 'multipla_escolha');
+
+                transaction.set(questionRef, {
+                    // Question Data
+                    text: q.text,
+                    options: q.options || [],
+                    correctAnswer: q.correctAnswer || null,
+                    graphicUrl: q.graphicUrl || null,
+                    hasGraphic: q.hasGraphic || false,
+                    supportText: questionSupportMap[i + 1] || null,
+
+                    // Source Exam Reference
+                    examId: examRef.id,
+                    examTitle: examData.title || file.name,
+                    questionIndex: i,
+
+                    // Metadata for filtering
+                    concurso: metadata.concurso || "",
+                    banca: metadata.banca || "",
+                    cargo: metadata.cargo || "",
+                    nivel: metadata.nivel || "",
+                    disciplina: metadata.disciplina || examData.course || "",
+                    areaDisciplina: metadata.areaDisciplina || "",
+                    ano: metadata.ano || new Date().getFullYear(),
+                    tipoQuestao: tipoQuestao,
+
+                    // System metadata
+                    createdAt: Timestamp.now(),
+                    createdBy: user!.uid
+                });
+            }
         });
 
-        const totalDuration = ((Date.now() - Date.now()) / 1000).toFixed(0); // Approximate
-        addLog(`Salvo com sucesso!`);
+        addLog(`Salvo com sucesso! ${examData.questions?.length || 0} questões adicionadas ao banco.`);
 
         setProgress(100);
         setUploading(false);
@@ -180,6 +250,7 @@ function SendExamContent() {
 
         router.push(`/dashboard/review/${examRef.id}`);
     };
+
 
     const [showPaymentInfo, setShowPaymentInfo] = useState<{ id: string, userId: string } | null>(null);
     const [processingPayment, setProcessingPayment] = useState(false);
@@ -242,7 +313,7 @@ function SendExamContent() {
         addLog("Iniciando processo...");
 
         const startTime = Date.now();
-        setTimeLeft(120);
+        setTimeLeft(170);
         setProgress(5);
         setUploadStatus("Lendo arquivo...");
         addLog(`Lendo arquivo: ${file.name}...`);
@@ -403,7 +474,7 @@ function SendExamContent() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <p className="text-xs text-slate-500 uppercase font-bold mb-1">Tempo Restante</p>
+                                    <p className="text-xs text-slate-500 uppercase font-bold mb-1">Sua prova estará pronta em:</p>
                                     <p className={clsx(
                                         "text-2xl font-mono font-bold",
                                         timeLeft < 60 ? "text-red-500" : "text-slate-700 dark:text-slate-300"

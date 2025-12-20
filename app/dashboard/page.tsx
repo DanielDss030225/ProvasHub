@@ -8,7 +8,7 @@ import { updateProfile, signOut } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu } from "lucide-react";
+import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { ImageCropper } from "../components/ImageCropper";
 import { getImageDimensions } from "../../lib/imageUtils";
@@ -199,10 +199,21 @@ export default function Dashboard() {
 
     // Filtered Exams
     const filteredExams = exams.filter(exam => {
-        const query = searchQuery.toLowerCase();
-        const title = (exam.extractedData?.title || exam.fileName).toLowerCase();
-        const course = (exam.extractedData?.course || "").toLowerCase();
-        return title.includes(query) || course.includes(query);
+        const queryNormalized = searchQuery.toLowerCase().trim();
+        if (!queryNormalized) return true;
+
+        const tokens = queryNormalized.split(/\s+/).filter(Boolean);
+        const searchableText = [
+            exam.extractedData?.title,
+            exam.fileName,
+            exam.extractedData?.course,
+            exam.extractedData?.description,
+            exam.extractedData?.metadata?.concurso,
+            exam.extractedData?.metadata?.banca,
+            exam.extractedData?.metadata?.cargo
+        ].filter(Boolean).join(" ").toLowerCase();
+
+        return tokens.every(token => searchableText.includes(token));
     });
 
     const [userCredits, setUserCredits] = useState<number | null>(null);
@@ -853,22 +864,21 @@ export default function Dashboard() {
                                                         {exam.extractedData?.title || exam.fileName}
                                                     </p>
                                                     <p className="text-xs text-slate-500 truncate">
-                                                        {exam.extractedData?.course || "Disciplina Desconhecida"} • {exam.userName || "Desconhecido"} • Resoluções: {exam.resolutions || 0}
+                                                        {exam.extractedData?.description || exam.extractedData?.course || "Disciplina Desconhecida"} • {exam.userName || "Desconhecido"} • Resoluções: {exam.resolutions || 0}
                                                     </p>
                                                 </div>
                                                 <span
-                                                    title={(exam.status === 'ready' && exam.extractedData?.questions?.some((q: any) => !q.correctAnswer)) ? "O usuário que enviou está prova ainda não enviou o gabarito de revisão, portanto as questões podem conter erros" : ""}
                                                     className={clsx(
                                                         "px-2 py-0.5 rounded-full text-xs font-medium shrink-0",
-                                                        (exam.status === 'ready' && exam.extractedData?.questions?.some((q: any) => !q.correctAnswer))
-                                                            ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                                                            : exam.status === 'ready'
-                                                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                                                : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                                                        exam.status === 'ready'
+                                                            ? (!(exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer))
+                                                                ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
+                                                                : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400")
+                                                            : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
                                                     )}>
-                                                    {(exam.status === 'ready' && exam.extractedData?.questions?.some((q: any) => !q.correctAnswer))
-                                                        ? 'Pendente de gabarito revisado'
-                                                        : exam.status === 'ready' ? 'Pronta' : 'Revisão'
+                                                    {exam.status === 'ready'
+                                                        ? (!(exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer)) ? 'Pendente de Gabarito' : 'Pronta')
+                                                        : 'Revisão'
                                                     }
                                                 </span>
                                             </div>
@@ -1090,6 +1100,26 @@ export default function Dashboard() {
                             </div>
                         </div>
 
+                        {/* Resolver Questões Button */}
+                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl  cursor-pointer group"
+                            onClick={() => router.push('/dashboard/questions')}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+                                        <BookOpen className="w-5 h-5" />
+                                        Banco de Questões
+                                    </h3>
+                                    <p className="text-emerald-100 text-sm">
+                                        Resolva questões filtradas por banca, disciplina, ano e mais.
+                                    </p>
+                                </div>
+                                <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition">
+                                    <BookOpen className="w-8 h-8" />
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Recent Exams List */}
                         <div>
                             <div className="flex items-center justify-between mb-6">
@@ -1134,19 +1164,20 @@ export default function Dashboard() {
                                             <div className="p-5 flex-1">
                                                 <div className="flex justify-between items-start mb-4">
                                                     {(() => {
-                                                        const hasAnswerKey = exam.extractedData?.questions?.some((q: any) => q.correctAnswer);
                                                         const isReady = exam.status === 'ready';
+                                                        const hasKey = exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer);
+                                                        const isPendingKey = isReady && !hasKey;
 
                                                         let statusLabel = "Em Revisão";
                                                         let statusClass = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
 
                                                         if (isReady) {
-                                                            if (hasAnswerKey) {
-                                                                statusLabel = "Pronta";
-                                                                statusClass = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400";
-                                                            } else {
+                                                            if (isPendingKey) {
                                                                 statusLabel = "Pendente de Gabarito";
                                                                 statusClass = "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400";
+                                                            } else {
+                                                                statusLabel = "Pronta";
+                                                                statusClass = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400";
                                                             }
                                                         }
 
@@ -1166,7 +1197,7 @@ export default function Dashboard() {
                                                     {exam.extractedData?.title || exam.fileName}
                                                 </h3>
                                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-1">
-                                                    {exam.extractedData?.course || "Disciplina Desconhecida"}
+                                                    {exam.extractedData?.description || exam.extractedData?.course || "Disciplina Desconhecida"}
                                                 </p>
 
                                                 <div className="flex items-center gap-2 text-xs text-slate-400 mb-4">
@@ -1316,7 +1347,7 @@ export default function Dashboard() {
                                                     className="w-full py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg hover:bg-violet-600 hover:text-white hover:border-violet-600 transition flex items-center justify-center gap-2"
                                                 >
                                                     <Upload className="w-3 h-3" />
-                                                    Atender (+100<CircleDollarSign className="w-3 h-3 text-yellow-500 inline" />)
+                                                    Atender +100<CircleDollarSign className="w-3 h-3 text-yellow-500 inline" />
                                                 </button>
                                             )}
                                         </div>

@@ -1,4 +1,8 @@
-const API_KEY = "AIzaSyCbJK9snNYmmjPn4ZM1ZTcRSwk9RXDDPX8";
+const API_KEY = process.env.GEMINI_API_KEY;
+if (!API_KEY) {
+    console.error("Please set GEMINI_API_KEY environment variable.");
+    process.exit(1);
+}
 const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`;
 
 async function run() {
