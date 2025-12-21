@@ -134,13 +134,13 @@ export default function Home() {
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 dark:text-white leading-[1.05] tracking-tight">
             Resolva provas e questões <br className="hidden md:block" />
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-600 via-indigo-500 to-emerald-500 animate-pulse transition-all">
-              com agilidade e foco
+              com foco e agilidade.
             </span> <br className="hidden md:block" />
-            no que realmente importa.
+
           </h1>
 
           <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto font-medium leading-relaxed">
-            A plataforma definitiva para quem busca aprovação. Estude com questões interativas geradas por IA e organize seu progresso de forma inteligente.
+            A plataforma definitiva para quem busca aprovação. Estude com questões interativas extraídas por IA de provas anteriores e organize seu progresso de forma inteligente.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-6">
