@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
-import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft } from "lucide-react";
+import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft, User, AlertTriangle } from "lucide-react";
 import { FormattedText } from "../../components/FormattedText";
 import clsx from "clsx";
 
@@ -29,6 +29,10 @@ interface QuestionBankItem {
     estado?: string;
     municipio?: string;
     tipoQuestao: 'multipla_escolha' | 'certo_errado';
+    isVerified?: boolean;
+    createdBy?: string;
+    createdByDisplayName?: string;
+    createdByPhotoURL?: string;
 }
 
 interface FilterState {
@@ -64,8 +68,9 @@ const normalizeText = (text: string) => {
 };
 
 export default function QuestionBankPage() {
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const router = useRouter();
+    const [isSigningInToSolve, setIsSigningInToSolve] = useState(false);
 
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -100,12 +105,7 @@ export default function QuestionBankPage() {
 
     const [searchQuery, setSearchQuery] = useState("");
 
-    // Auth redirect
-    useEffect(() => {
-        if (!authLoading && !user) {
-            router.push("/");
-        }
-    }, [user, authLoading, router]);
+    // Removed automatic redirect to allow guest browsing
 
     const fetchAllDynamicOptions = useCallback(async () => {
         try {
@@ -164,12 +164,10 @@ export default function QuestionBankPage() {
 
     // Fetch dynamic options from DB on load
     useEffect(() => {
-        if (!user) return;
         fetchAllDynamicOptions();
-    }, [user, fetchAllDynamicOptions]);
+    }, [fetchAllDynamicOptions]);
 
     const fetchAndFilterQuestions = useCallback(async () => {
-        if (!user) return;
         setLoading(true);
 
         try {
@@ -295,7 +293,13 @@ export default function QuestionBankPage() {
 
     const hasActiveFilters = Object.values(filters).some(v => v !== "") || searchQuery.trim() !== "";
 
-    const startSolving = () => {
+    const startSolving = useCallback(async () => {
+        if (!user) {
+            setIsSigningInToSolve(true);
+            await signInWithGoogle();
+            return;
+        }
+
         // Save filtered questions to session storage so they can be picked up by the solve page
         if (questions.length > 0) {
             try {
@@ -313,7 +317,14 @@ export default function QuestionBankPage() {
         });
         if (searchQuery) params.set('q', searchQuery);
         router.push(`/dashboard/questions/solve?${params.toString()}`);
-    };
+    }, [user, questions, solveLimit, filters, searchQuery, router, signInWithGoogle]);
+
+    useEffect(() => {
+        if (user && isSigningInToSolve) {
+            setIsSigningInToSolve(false);
+            startSolving();
+        }
+    }, [user, isSigningInToSolve, startSolving]);
 
     if (authLoading) {
         return (
@@ -557,6 +568,12 @@ export default function QuestionBankPage() {
                                     <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-violet-600 text-white rounded-lg shadow-md shadow-violet-500/20">
                                         Questão {idx + 1}
                                     </span>
+                                    {question.isVerified === false && (
+                                        <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white rounded-lg shadow-md shadow-amber-500/20 flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3" />
+                                            Pendente de Gabarito
+                                        </span>
+                                    )}
                                     {question.banca && (
                                         <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                                             {question.banca}
@@ -604,6 +621,20 @@ export default function QuestionBankPage() {
                                                     </span>
                                                 </div>
                                             )}
+
+                                            {/* Owner Info */}
+                                            <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-800 pl-4">
+                                                {question.createdByPhotoURL ? (
+                                                    <img src={question.createdByPhotoURL} alt={question.createdByDisplayName} className="w-4 h-4 rounded-full" />
+                                                ) : (
+                                                    <div className="w-4 h-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-[10px] text-slate-500">
+                                                        <User className="w-2.5 h-2.5" />
+                                                    </div>
+                                                )}
+                                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tight truncate max-w-[80px]">
+                                                    {question.createdByDisplayName || "Anônimo"}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
 

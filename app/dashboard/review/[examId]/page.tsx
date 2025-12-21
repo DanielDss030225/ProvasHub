@@ -654,7 +654,10 @@ export default function ReviewPage({ params }: PageProps) {
                             municipio: q.municipio || "",
                             tipoQuestao: q.tipoQuestao || "multipla_escolha",
                             createdAt: Timestamp.now(),
-                            createdBy: user!.uid
+                            isVerified: !!hasKey,
+                            createdBy: user!.uid,
+                            createdByDisplayName: user!.displayName || "Anônimo",
+                            createdByPhotoURL: user!.photoURL || null
                         });
                     }
 

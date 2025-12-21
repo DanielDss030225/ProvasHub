@@ -8,7 +8,7 @@ import { updateProfile, signOut } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen } from "lucide-react";
+import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { FormattedText } from "../components/FormattedText";
 import { ImageCropper } from "../components/ImageCropper";
@@ -44,6 +44,7 @@ export default function Dashboard() {
     // Exam Requests System
     const [examRequests, setExamRequests] = useState<any[]>([]);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [pendingExam, setPendingExam] = useState<{ id: string, title: string, userId: string } | null>(null);
 
 
 
@@ -233,6 +234,14 @@ export default function Dashboard() {
             setProfilePhoto(user.photoURL || "");
             fetchExams();
             fetchRequests();
+
+            // Check for pending exam from landing page
+            const pendingId = localStorage.getItem('pending_exam_id');
+            const pendingTitle = localStorage.getItem('pending_exam_title');
+            const pendingUserId = localStorage.getItem('pending_exam_user_id');
+            if (pendingId && pendingTitle) {
+                setPendingExam({ id: pendingId, title: pendingTitle, userId: pendingUserId || "" });
+            }
 
             // Subscribe to user credits
             const userRef = doc(db, "users", user.uid);
@@ -561,11 +570,12 @@ export default function Dashboard() {
 
 
 
-    const executeSolveExam = async () => {
-        if (!confirmingSolveExam || !user) return;
+    const executeSolveExam = async (examOverride?: any) => {
+        if (!examOverride && !confirmingSolveExam) return;
+        if (!user) return;
         setProcessingPayment(true);
 
-        const exam = confirmingSolveExam;
+        const exam = examOverride || confirmingSolveExam;
 
         try {
             // Deduct 50 credits from solver, Reward 25 to author
@@ -710,7 +720,7 @@ export default function Dashboard() {
                                     Cancelar
                                 </button>
                                 <button
-                                    onClick={executeSolveExam}
+                                    onClick={() => executeSolveExam()}
                                     disabled={processingPayment}
                                     className="flex-1 py-3 px-4 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
@@ -1640,6 +1650,75 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+            {/* Modal: Continuar para a prova (Post-Login Redirect) */}
+            {pendingExam && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+                    <div
+                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+                        onClick={() => {
+                            localStorage.removeItem('pending_exam_id');
+                            localStorage.removeItem('pending_exam_title');
+                            localStorage.removeItem('pending_exam_user_id');
+                            setPendingExam(null);
+                        }}
+                    />
+                    <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-8 animate-in zoom-in-95 duration-300">
+                        <div className="flex flex-col items-center text-center space-y-6">
+                            <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center text-violet-600 dark:text-violet-400">
+                                <Play className="w-10 h-10 fill-current" />
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white">
+                                    Vamos continuar?
+                                </h3>
+                                <p className="text-slate-500 dark:text-slate-400 font-medium">
+                                    Você clicou para resolver a prova: <br />
+                                    <span className="text-violet-600 dark:text-violet-400 font-bold">"{pendingExam.title}"</span>
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col w-full gap-3">
+                                <button
+                                    onClick={() => {
+                                        const { id, title, userId } = pendingExam;
+                                        localStorage.removeItem('pending_exam_id');
+                                        localStorage.removeItem('pending_exam_title');
+                                        localStorage.removeItem('pending_exam_user_id');
+                                        setPendingExam(null);
+
+                                        if (user.uid === userId) {
+                                            router.push(`/dashboard/solve/${id}`);
+                                        } else {
+                                            setConfirmingSolveExam({
+                                                id,
+                                                userId,
+                                                extractedData: { title }
+                                            });
+                                        }
+                                    }}
+                                    className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black shadow-lg shadow-violet-500/25 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <Play className="w-4 h-4" />
+                                    CONTINUAR PARA A PROVA
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        localStorage.removeItem('pending_exam_id');
+                                        localStorage.removeItem('pending_exam_title');
+                                        localStorage.removeItem('pending_exam_user_id');
+                                        setPendingExam(null);
+                                    }}
+                                    className="w-full py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-bold transition-all active:scale-95"
+                                >
+                                    Agora não, obrigado
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
