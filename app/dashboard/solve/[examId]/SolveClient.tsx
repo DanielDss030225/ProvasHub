@@ -19,6 +19,7 @@ export default function SolveClient({ examId }: SolveClientProps) {
     const router = useRouter();
     const { showAlert } = useAlert();
     const headersCreditsRef = useRef<HTMLDivElement>(null); // Ref for the credits in header
+    const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for the scrollable area
 
     // Exam Data
     const [exam, setExam] = useState<any>(null);
@@ -149,13 +150,14 @@ export default function SolveClient({ examId }: SolveClientProps) {
                         startY = rect.top + rect.height / 2;
                     }
 
-                    await runTransaction(db, async (transaction) => {
+                    // Persist to Firebase in background (don't await)
+                    runTransaction(db, async (transaction) => {
                         const userRef = doc(db, "users", user.uid);
                         const userDoc = await transaction.get(userRef);
                         if (!userDoc.exists()) throw "User does not exist!";
                         const newCredits = (userDoc.data().credits || 0) + 1;
                         transaction.update(userRef, { credits: newCredits });
-                    });
+                    }).catch(error => console.error("Error updating credits in background:", error));
 
                     setAnsweredQuestions(prev => {
                         const next = new Set(prev);
@@ -182,6 +184,7 @@ export default function SolveClient({ examId }: SolveClientProps) {
             );
         } else {
             setCurrentIndex(prev => prev + 1);
+            scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
@@ -206,13 +209,14 @@ export default function SolveClient({ examId }: SolveClientProps) {
             try {
                 setRewardAwarded(true);
 
-                await runTransaction(db, async (transaction) => {
+                // Update Firestore in background
+                runTransaction(db, async (transaction) => {
                     const userRef = doc(db, "users", user.uid);
                     const userDoc = await transaction.get(userRef);
                     if (!userDoc.exists()) throw "User does not exist!";
                     const newCredits = (userDoc.data().credits || 0) + rewardCoins;
                     transaction.update(userRef, { credits: newCredits });
-                });
+                }).catch(error => console.error("Error awarding final reward in background:", error));
 
                 const startX = window.innerWidth / 2;
                 const startY = window.innerHeight / 2;
@@ -287,6 +291,13 @@ export default function SolveClient({ examId }: SolveClientProps) {
     const currentQuestion = questions[currentIndex];
     const score = calculateScore();
     const motivational = getMotivationalMessage(score.percentage);
+
+    // Support text and graphic check for current question
+    const validSupportTexts = exam?.extractedData?.supportTexts?.filter((st: any) => {
+        if (!st.associatedQuestions) return false;
+        return st.associatedQuestions.includes((currentIndex + 1).toString());
+    });
+    const hasGraphic = currentQuestion?.graphicUrl;
 
     return (
         <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 transition-all duration-500 overflow-hidden">
@@ -579,40 +590,27 @@ export default function SolveClient({ examId }: SolveClientProps) {
                                     <span className="hidden md:inline">Gabarito</span>
                                 </button>
 
-                                {(() => {
-                                    const validSupportTexts = exam?.extractedData?.supportTexts?.filter((st: any) => {
-                                        if (!st.associatedQuestions) return false;
-                                        return st.associatedQuestions.includes((currentIndex + 1).toString());
-                                    });
+                                {validSupportTexts && validSupportTexts.length > 0 && (
+                                    <button
+                                        onClick={() => setShowSupportTextModal(true)}
+                                        className="text-sm font-medium text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 p-2 md:p-0 rounded-lg md:rounded-none bg-purple-50 md:bg-transparent"
+                                        title="Ver Textos"
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                        <span className="hidden md:inline">Textos ({validSupportTexts.length})</span>
+                                    </button>
+                                )}
 
-                                    const hasGraphic = currentQuestion?.graphicUrl;
-
-                                    return (
-                                        <>
-                                            {validSupportTexts && validSupportTexts.length > 0 && (
-                                                <button
-                                                    onClick={() => setShowSupportTextModal(true)}
-                                                    className="text-sm font-medium text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 p-2 md:p-0 rounded-lg md:rounded-none bg-purple-50 md:bg-transparent"
-                                                    title="Ver Textos"
-                                                >
-                                                    <FileText className="w-4 h-4" />
-                                                    <span className="hidden md:inline">Textos ({validSupportTexts.length})</span>
-                                                </button>
-                                            )}
-
-                                            {hasGraphic && (
-                                                <button
-                                                    onClick={() => setShowGraphicModal(true)}
-                                                    className="text-sm font-medium text-violet-600 hover:text-violet-800 hover:underline flex items-center gap-1 p-2 md:p-0 rounded-lg md:rounded-none bg-violet-50 md:bg-transparent"
-                                                    title="Ver Imagem"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                    <span className="hidden md:inline">Imagem</span>
-                                                </button>
-                                            )}
-                                        </>
-                                    );
-                                })()}
+                                {hasGraphic && (
+                                    <button
+                                        onClick={() => setShowGraphicModal(true)}
+                                        className="text-sm font-medium text-violet-600 hover:text-violet-800 hover:underline flex items-center gap-1 p-2 md:p-0 rounded-lg md:rounded-none bg-violet-50 md:bg-transparent"
+                                        title="Ver Imagem"
+                                    >
+                                        <Eye className="w-4 h-4" />
+                                        <span className="hidden md:inline">Imagem</span>
+                                    </button>
+                                )}
                             </div>
 
                             <button
@@ -643,7 +641,10 @@ export default function SolveClient({ examId }: SolveClientProps) {
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 pb-10 md:pb-20 flex justify-center custom-scrollbar">
+                        <div
+                            ref={scrollContainerRef}
+                            className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 pb-10 md:pb-20 flex justify-center custom-scrollbar"
+                        >
                             <div className="w-full max-w-4xl space-y-8 pb-20 md:pb-40">
                                 {/* Question Text */}
                                 <div className="bg-white dark:bg-slate-900 p-6 md:p-10 rounded-3xl shadow-lg border border-slate-100 dark:border-slate-800/50 relative overflow-hidden group">
@@ -696,7 +697,10 @@ export default function SolveClient({ examId }: SolveClientProps) {
                         {/* Footer Navigation */}
                         <div className="h-24 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 md:px-12 shrink-0 z-20">
                             <button
-                                onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
+                                onClick={() => {
+                                    setCurrentIndex(prev => Math.max(0, prev - 1));
+                                    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
                                 disabled={currentIndex === 0}
                                 className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-violet-600 disabled:opacity-30 disabled:hover:text-slate-500 transition font-bold uppercase tracking-wider text-sm"
                             >
