@@ -74,13 +74,32 @@ export default function Home() {
     );
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "ViewGo",
+    "url": "https://provashub.vercel.app",
+    "description": "Plataforma de estudos para concursos com simulados e extração de questões via IA.",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "BRL"
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 md:px-8 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/icone.png" alt="Logo" className="w-8 h-8 object-contain" />
+            <img src="/logonatal.png" alt="Logo Natalina" className="w-12 h-12 object-contain" />
             <span className="text-xl font-black text-slate-800 dark:text-white tracking-tighter">ViewGo</span>
           </div>
 
@@ -107,7 +126,7 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-32 px-4 overflow-hidden perspective-3d">
+      <section className="relative pt-12 pb-32 px-4 overflow-hidden perspective-3d">
         {/* Advanced 3D Background Elements */}
         <div className="absolute inset-0 -z-10 bg-slate-50 dark:bg-slate-950/20">
           {/* 3D Moving Floor */}
@@ -130,10 +149,17 @@ export default function Home() {
         </div>
 
         <div className="max-w-5xl mx-auto text-center space-y-10 relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="flex justify-center mb-[-10px]">
+            <img
+              src="/logonatal.png"
+              alt="Natal ViewGo"
+              className="w-32 h-32 md:w-48 md:h-48 object-contain drop-shadow-2xl"
+            />
+          </div>
 
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 dark:text-white leading-[1.05] tracking-tight">
             Resolva provas e questões <br className="hidden md:block" />
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-600 via-indigo-500 to-emerald-500 animate-pulse transition-all">
+            <span className="text-violet-600 dark:text-violet-400">
               com foco e agilidade.
             </span> <br className="hidden md:block" />
 
@@ -259,7 +285,7 @@ export default function Home() {
       <footer className="border-t border-slate-200 dark:border-slate-800 py-12 px-4 text-center">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <img src="/icone.png" alt="Logo" className="w-6 h-6 object-contain opacity-50" />
+            <img src="/logonatal.png" alt="Logo Natalina" className="w-10 h-10 object-contain opacity-70" />
             <span className="text-lg font-black text-slate-400 tracking-tighter">ViewGo</span>
           </div>
           <p className="text-slate-500 dark:text-slate-400 font-medium">Plataforma de Estudos Inteligente</p>
