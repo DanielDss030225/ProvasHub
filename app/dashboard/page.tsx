@@ -119,9 +119,10 @@ export default function Dashboard() {
                     examId: notification.data.examId
                 });
 
-                // 2. Mark Exam as Ready/Verified (Optional, depending on your logic)
+                // 2. Mark Exam as Ready/Verified
                 transaction.update(examRef, {
-                    status: "ready"
+                    status: "ready",
+                    creditsAwarded: false
                 });
 
                 // 3. Award Credits to Fulfiller
@@ -924,16 +925,25 @@ export default function Dashboard() {
                                                 <span
                                                     className={clsx(
                                                         "px-2 py-0.5 rounded-full text-xs font-medium shrink-0",
-                                                        exam.status === 'ready'
-                                                            ? (!(exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer))
+                                                        (() => {
+                                                            const questions = exam.extractedData?.questions || [];
+                                                            const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
+                                                            const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
+
+                                                            if (exam.status !== 'ready') return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+                                                            return !hasKey
                                                                 ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                                                                : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400")
-                                                            : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                                                                : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400";
+                                                        })()
                                                     )}>
-                                                    {exam.status === 'ready'
-                                                        ? (!(exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer)) ? 'Pendente de Gabarito' : 'Pronta')
-                                                        : 'Revisão'
-                                                    }
+                                                    {(() => {
+                                                        const questions = exam.extractedData?.questions || [];
+                                                        const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
+                                                        const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
+
+                                                        if (exam.status !== 'ready') return 'Revisão';
+                                                        return !hasKey ? 'Pendente de Gabarito' : 'Pronta';
+                                                    })()}
                                                 </span>
                                             </div>
                                         ))}
@@ -948,7 +958,7 @@ export default function Dashboard() {
             {/* Fixed Header */}
             <motion.div
                 variants={headerVariants as any}
-                className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] shadow-sm transition-colors"
+                className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] transition-colors"
             >
                 <div className="max-w-6xl mx-auto px-4 md:px-8 h-full">
                     <div className="flex items-center justify-between h-full">
@@ -1252,7 +1262,9 @@ export default function Dashboard() {
                                                 <div className="flex justify-between items-start mb-4">
                                                     {(() => {
                                                         const isReady = exam.status === 'ready';
-                                                        const hasKey = exam.creditsAwarded ?? exam.extractedData?.questions?.some((q: any) => q.correctAnswer);
+                                                        const questions = exam.extractedData?.questions || [];
+                                                        const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
+                                                        const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
                                                         const isPendingKey = isReady && !hasKey;
 
                                                         let statusLabel = "Em Revisão";
