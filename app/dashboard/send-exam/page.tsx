@@ -199,7 +199,8 @@ function SendExamContent() {
 
             for (let i = 0; i < questions.length; i++) {
                 const q = questions[i];
-                const questionRef = doc(collection(db, "questions"));
+                // Use deterministic ID to prevent duplicates on review/update
+                const questionRef = doc(db, "questions", `${examRef.id}_q${i}`);
 
                 // Detect question type based on options or metadata
                 const tipoQuestao = metadata.tipoQuestao ||
@@ -476,7 +477,7 @@ function SendExamContent() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <p className="text-xs text-slate-500 uppercase font-bold mb-1">Sua prova estará pronta em:</p>
+                                    <p className="text-xs text-slate-500 uppercase font-bold mb-1">Sua prova estará pronta para revisão em:</p>
                                     <p className={clsx(
                                         "text-2xl font-mono font-bold",
                                         timeLeft < 60 ? "text-red-500" : "text-slate-700 dark:text-slate-300"

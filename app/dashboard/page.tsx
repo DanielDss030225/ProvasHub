@@ -7,6 +7,7 @@ import { auth, db, storage } from "../../lib/firebase";
 import { updateProfile, signOut } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { motion } from "framer-motion";
 
 import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -642,10 +643,41 @@ export default function Dashboard() {
 
 
 
+    // Animation Variants
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1,
+                delayChildren: 0.1
+            }
+        }
+    };
+
+    const itemVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
+    };
+
+    const headerVariants = {
+        hidden: { opacity: 0, y: -20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
+    };
+
+    const sidebarVariants = {
+        hidden: { opacity: 0, x: 20 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
+    };
+
     if (loading || !user) return null;
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8 transition-colors duration-300">
+        <motion.div
+            initial="hidden"
+            animate="visible"
+            className="min-h-screen lg:h-screen bg-slate-50 dark:bg-slate-950 transition-colors lg:overflow-hidden"
+        >
             {/* Owner Action Modal */}
             {selectedExam && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedExam(null)}>
@@ -912,9 +944,12 @@ export default function Dashboard() {
             )}
 
             {/* Fixed Header */}
-            <div className="fixed top-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 shadow-sm transition-colors duration-300">
-                <div className="max-w-5xl mx-auto px-8 py-4">
-                    <div className="flex items-center justify-between">
+            <motion.div
+                variants={headerVariants}
+                className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] shadow-sm transition-colors"
+            >
+                <div className="max-w-6xl mx-auto px-4 md:px-8 h-full">
+                    <div className="flex items-center justify-between h-full">
                         <div className="flex items-center gap-3">
                             <h1 className="text-3xl font-bold">
                                 <span className="text-slate-900 dark:text-white">View</span>
@@ -1087,20 +1122,27 @@ export default function Dashboard() {
                         )}
                     </div>
                 </div>
-            </div>
+            </motion.div>
 
-            {/* Spacer for fixed header */}
-
-            <div className="max-w-6xl mx-auto space-y-8 pt-8">
+            <motion.div
+                variants={containerVariants}
+                className="max-w-6xl mx-auto space-y-8 pt-4 lg:pt-16 lg:h-full lg:overflow-hidden px-4 md:px-8"
+            >
                 {/* Responsive Layout: Flex Column Reverse on Mobile (Right on Top), Flex Row on Desktop */}
-                <div className="flex flex-col-reverse lg:flex-row gap-4 lg:gap-8 items-start">
+                <div className="flex flex-col-reverse lg:flex-row gap-4 lg:gap-8 items-start lg:h-full">
 
                     {/* Main Content (Left on Desktop, Bottom on Mobile) */}
-                    <div className="flex-1 w-full min-w-0 space-y-8 h-auto lg:h-[calc(100vh-50px)] lg:overflow-y-auto pb-24 custom-scrollbar">
-                        <div className="hidden lg:block h-5"></div>
+                    <motion.div
+                        variants={itemVariants}
+                        className="flex-1 w-full min-w-0 space-y-8 h-auto lg:h-full lg:overflow-y-auto pb-24 lg:pb-32 custom-scrollbar lg:pt-[15px]"
+                        style={{
+                            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
+                            maskImage: 'linear-gradient(to bottom, transparent, black 15px, black)'
+                        }}
+                    >
                         {/* Upload Section */}
                         {/* Upload Button Section */}
-                        <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors text-center">
+                        <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors text-center">
                             <div className="max-w-xl mx-auto">
                                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
                                     Enviar nova Prova ou Simulado
@@ -1118,30 +1160,53 @@ export default function Dashboard() {
                                     <span className="text-lg">Enviar nova Prova ou Simulado</span>
                                 </button>
                             </div>
-                        </div>
+                        </motion.div>
 
-                        {/* Resolver Questões Button */}
-                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl  cursor-pointer group"
-                            onClick={() => router.push('/dashboard/questions')}
-                        >
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
-                                        <BookOpen className="w-5 h-5" />
-                                        Banco de Questões
-                                    </h3>
-                                    <p className="text-emerald-100 text-sm">
-                                        Resolva questões filtradas por banca, disciplina, ano e mais.
-                                    </p>
-                                </div>
-                                <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition">
-                                    <BookOpen className="w-8 h-8" />
+                        {/* Resolver Questões Cards Grid */}
+                        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+                            {/* Card 1: List View */}
+                            <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
+                                onClick={() => router.push('/dashboard/questions-list')}
+                            >
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex-1">
+                                        <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+                                            <BookOpen className="w-5 h-5" />
+                                            Resolver Questões
+                                        </h3>
+                                        <p className="text-violet-100 text-sm">
+                                            Acesse o banco completo em formato de lista para estudo focado.
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition shrink-0">
+                                        <FileText className="w-8 h-8" />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+
+                            {/* Card 2: Modalidade Quiz */}
+                            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
+                                onClick={() => router.push('/dashboard/questions')}
+                            >
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex-1">
+                                        <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+                                            <Target className="w-5 h-5" />
+                                            Resolver Questões Modalidade Quiz
+                                        </h3>
+                                        <p className="text-emerald-100 text-sm">
+                                            Resolva uma por uma com cronômetro e feedback imediato.
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition shrink-0">
+                                        <Play className="w-8 h-8 fill-current" />
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
 
                         {/* Recent Exams List */}
-                        <div>
+                        <motion.div variants={itemVariants}>
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold text-slate-800 dark:text-white">Provas Recentes</h2>
                                 <button
@@ -1295,12 +1360,18 @@ export default function Dashboard() {
                                     ))}
                                 </div>
                             )}
-                        </div>
-                    </div>
+                        </motion.div>
+                    </motion.div>
 
                     {/* Right Sidebar: Exam Requests (Right on Desktop, Top on Mobile) */}
-                    <div className="w-full lg:w-[300px] shrink-0 h-auto lg:h-[calc(100vh-50px)] overflow-visible lg:overflow-y-hidden pb-4 lg:pb-24 mt-6 lg:mt-0">
-                        <div className="lg:h-10"></div>
+                    <motion.div
+                        variants={sidebarVariants}
+                        className="w-full lg:w-[300px] shrink-0 h-auto lg:h-full lg:overflow-y-auto lg:pb-32 pb-4 mt-6 lg:mt-0 custom-scrollbar lg:pt-[15px]"
+                        style={{
+                            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
+                            maskImage: 'linear-gradient(to bottom, transparent, black 15px, black)'
+                        }}
+                    >
 
                         <div className="">
                             <div className="flex items-center justify-between mb-4">
@@ -1328,9 +1399,9 @@ export default function Dashboard() {
                                     </button>
                                 </div>
                             ) : (
-                                <div className="flex gap-4 overflow-x-auto pb-4 lg:flex-col lg:space-y-4 lg:overflow-x-visible lg:overflow-y-auto lg:pb-24 lg:h-[calc(100vh-200px)] custom-scrollbar">
+                                <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:-mx-8 md:px-8 lg:mx-0 lg:px-0 lg:flex-col lg:space-y-4 lg:overflow-x-visible lg:overflow-y-auto lg:pb-24 lg:h-full custom-scrollbar">
                                     {examRequests.map((req) => (
-                                        <div key={req.id} className="min-w-[280px] w-[280px] lg:w-full lg:min-w-0 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 transition group relative">
+                                        <div key={req.id} className="min-w-[280px] w-[280px] lg:w-full lg:min-w-0 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 transition group relative flex-shrink-0">
                                             {/* Pulsing Dot */}
                                             <span className="absolute top-3 right-3 flex h-3 w-3">
                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
@@ -1379,9 +1450,9 @@ export default function Dashboard() {
 
 
                         </div>
-                    </div>
+                    </motion.div>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Profile Modal */}
             {
@@ -1719,6 +1790,6 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
-        </div >
+        </motion.div>
     );
 }

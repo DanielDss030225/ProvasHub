@@ -149,13 +149,6 @@ export default function Home() {
         </div>
 
         <div className="max-w-5xl mx-auto text-center space-y-10 relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-          <div className="flex justify-center mb-[-10px]">
-            <img
-              src="/logonatal.png"
-              alt="Natal ViewGo"
-              className="w-32 h-32 md:w-48 md:h-48 object-contain drop-shadow-2xl"
-            />
-          </div>
 
           <h1 className="text-5xl md:text-7xl font-black text-slate-800 dark:text-white leading-[1.05] tracking-tight">
             Resolva provas e questões <br className="hidden md:block" />
@@ -171,7 +164,7 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-6">
             <button
-              onClick={() => router.push("/dashboard/questions")}
+              onClick={() => router.push("/dashboard/questions-list")}
               className="w-full sm:w-auto px-10 py-5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-lg font-black shadow-2xl shadow-violet-500/30 transition-all hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3 group"
             >
               <BookOpen className="w-6 h-6 group-hover:-rotate-12 transition-transform" />

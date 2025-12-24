@@ -5,10 +5,11 @@ import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db } from "../../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit, doc, runTransaction } from "firebase/firestore";
-import { Loader2, ArrowLeft, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, Coins, BookOpen, Trophy } from "lucide-react";
+import { Loader2, ArrowLeft, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, Coins, BookOpen, Trophy, MessageSquare, Share2 } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 import { FormattedText } from "../../../components/FormattedText";
+import { CommentsSection } from "../../../components/CommentsSection";
 
 interface QuestionBankItem {
     id: string;
@@ -46,6 +47,7 @@ function QuestionSolveContent() {
     const searchParams = useSearchParams();
     const { showAlert } = useAlert();
     const headersCreditsRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Questions State
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
@@ -56,11 +58,13 @@ function QuestionSolveContent() {
     const [answers, setAnswers] = useState<Record<number, string>>({});
     const [showResult, setShowResult] = useState<Record<number, boolean>>({});
     const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+    const [questionAttempts, setQuestionAttempts] = useState<Map<string, { isCorrect: boolean }>>(new Map());
 
     // Credits & Animation
     const [userCredits, setUserCredits] = useState(0);
     const [flyingCoins, setFlyingCoins] = useState<{ id: number; startX: number; startY: number; delay: number }[]>([]);
     const [creditPulse, setCreditPulse] = useState(false);
+    const [showComments, setShowComments] = useState(false);
     const [rewardAwarded, setRewardAwarded] = useState(false);
 
     // Timer
@@ -98,15 +102,57 @@ function QuestionSolveContent() {
         return () => clearInterval(interval);
     }, [status, questions.length]);
 
+    // Scroll to top when question changes
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [currentIndex]);
+
+    // Fetch questions based on URL filters
     // Fetch questions based on URL filters
     useEffect(() => {
         if (!user) return;
         fetchQuestions();
+
+        // Fetch attempts
+        const fetchAttempts = async () => {
+            try {
+                const attemptsRef = collection(db, "users", user.uid, "questionAttempts");
+                const qAttempts = query(attemptsRef);
+                const snap = await getDocs(qAttempts);
+                const map = new Map<string, { isCorrect: boolean }>();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    map.set(doc.id, { isCorrect: data.isCorrect });
+                });
+                setQuestionAttempts(map);
+            } catch (err) {
+                console.error("Error fetching question attempts:", err);
+            }
+        };
+        fetchAttempts();
     }, [user, searchParams]);
 
     const fetchQuestions = async () => {
         setLoading(true);
         try {
+            // Priority 0: Check for specific ID in URL
+            const specificId = searchParams.get('id');
+            if (specificId) {
+                import("firebase/firestore").then(async ({ getDoc }) => {
+                    const docRef = doc(db, "questions", specificId);
+                    const directSnap = await getDoc(docRef);
+                    if (directSnap.exists()) {
+                        setQuestions([{ id: directSnap.id, ...directSnap.data() } as QuestionBankItem]);
+                    } else {
+                        setQuestions([]);
+                    }
+                    setLoading(false);
+                });
+                return;
+            }
+
             // Priority 1: Check if we have filtered questions from the bank in session storage
             const savedQuestions = sessionStorage.getItem('filtered_questions');
             if (savedQuestions) {
@@ -228,29 +274,51 @@ function QuestionSolveContent() {
         const isCorrect = optionLetter.toLowerCase() === (currentQuestion.correctAnswer?.toLowerCase() || '');
 
         // Award credit if correct and not already answered
-        if (isCorrect && user && !answeredQuestions.has(currentQuestion.id)) {
+        if (user) {
             try {
-                // Capture position for animation
-                const rect = e.currentTarget.getBoundingClientRect();
-                const startX = rect.left + rect.width / 2;
-                const startY = rect.top + rect.height / 2;
+                // Determine status once
+                const isCorrectAttempt = isCorrect;
 
-                // Update credits in Firestore
-                await runTransaction(db, async (transaction) => {
-                    const userRef = doc(db, "users", user.uid);
-                    const userDoc = await transaction.get(userRef);
-                    if (!userDoc.exists()) throw "User does not exist!";
-                    const newCredits = (userDoc.data().credits || 0) + 1;
-                    transaction.update(userRef, { credits: newCredits });
+                // Save attempt to Firestore (create or update)
+                // We store the LAST attempt status. 
+                // Alternatively, we could store 'correct: true' if EVER correct. 
+                // Let's store simple status: correct/incorrect + timestamp
+                const attemptRef = doc(db, "users", user.uid, "questionAttempts", currentQuestion.id);
+                // We use setDoc with merge: true to avoid overwriting unrelated fields if we add them later
+                // But simplified: just set the status
+                import("firebase/firestore").then(({ setDoc, serverTimestamp }) => {
+                    setDoc(attemptRef, {
+                        questionId: currentQuestion.id,
+                        isCorrect: isCorrectAttempt,
+                        userAnswer: optionLetter,
+                        lastAttemptAt: serverTimestamp(),
+                        examId: currentQuestion.examId
+                    }, { merge: true }).catch(err => console.error("Error saving attempt:", err));
                 });
 
-                setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
-                const newCoin = { id: Date.now(), startX, startY, delay: 0 };
-                setFlyingCoins(prev => [...prev, newCoin]);
-                playSound('collect');
+                if (isCorrect && !answeredQuestions.has(currentQuestion.id)) {
+                    // Capture position for animation
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    // Update credits in Firestore
+                    await runTransaction(db, async (transaction) => {
+                        const userRef = doc(db, "users", user.uid);
+                        const userDoc = await transaction.get(userRef);
+                        if (!userDoc.exists()) throw "User does not exist!";
+                        const newCredits = (userDoc.data().credits || 0) + 1;
+                        transaction.update(userRef, { credits: newCredits });
+                    });
+
+                    setAnsweredQuestions(prev => new Set(prev).add(currentQuestion.id));
+                    const newCoin = { id: Date.now(), startX, startY, delay: 0 };
+                    setFlyingCoins(prev => [...prev, newCoin]);
+                    playSound('collect');
+                }
 
             } catch (error) {
-                console.error("Error updating credits:", error);
+                console.error("Error updates:", error);
             }
         }
     };
@@ -260,6 +328,18 @@ function QuestionSolveContent() {
             setCurrentIndex(prev => prev + 1);
         } else {
             handleFinish();
+        }
+    };
+
+    const handleShare = async () => {
+        const currentQuestion = questions[currentIndex];
+        const url = `${window.location.origin}/dashboard/questions/solve?id=${currentQuestion.id}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showAlert("Link copiado para a área de transferência!", "success");
+        } catch (err) {
+            console.error("Failed to copy: ", err);
+            showAlert("Erro ao copiar o link.", "error");
         }
     };
 
@@ -468,8 +548,14 @@ function QuestionSolveContent() {
 
                                 <div className="flex gap-4 justify-center">
                                     <button
-                                        onClick={() => router.push('/dashboard/questions')}
+                                        onClick={() => router.push('/dashboard')}
                                         className="px-6 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                    >
+                                        Voltar ao Painel
+                                    </button>
+                                    <button
+                                        onClick={() => router.push('/dashboard/questions')}
+                                        className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                                     >
                                         Voltar ao Banco
                                     </button>
@@ -550,13 +636,34 @@ function QuestionSolveContent() {
                     </div>
 
                     {/* Main Content */}
-                    <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
+                    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
                         <div className="max-w-4xl mx-auto space-y-6">
                             {/* Question Metadata */}
                             <div className="flex flex-wrap gap-2">
                                 {currentQuestion.banca && (
                                     <span className="px-3 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                                         {currentQuestion.banca}
+                                    </span>
+                                )}
+                                {/* Answer Status Badge */}
+                                {questionAttempts.has(currentQuestion.id) && (
+                                    <span className={clsx(
+                                        "px-3 py-1 text-xs font-medium rounded-full flex items-center gap-1.5 border",
+                                        questionAttempts.get(currentQuestion.id)?.isCorrect
+                                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+                                            : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                                    )}>
+                                        {questionAttempts.get(currentQuestion.id)?.isCorrect ? (
+                                            <>
+                                                <CheckCircle className="w-3 h-3" />
+                                                Respondida Corretamente
+                                            </>
+                                        ) : (
+                                            <>
+                                                <XCircle className="w-3 h-3" />
+                                                Respondida Incorretamente
+                                            </>
+                                        )}
                                     </span>
                                 )}
                                 {currentQuestion.ano && (
@@ -670,6 +777,34 @@ function QuestionSolveContent() {
                                         </button>
                                     );
                                 })}
+                            </div>
+
+                            {/* Comments Section */}
+                            <div className="pt-8 border-t border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="flex items-center justify-between mb-4">
+                                    <button
+                                        onClick={() => setShowComments(!showComments)}
+                                        className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                        {showComments ? "Ocultar Comentários" : "Ver Comentários e Discussão"}
+                                    </button>
+
+                                    <button
+                                        onClick={handleShare}
+                                        className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                        title="Compartilhar questão"
+                                    >
+                                        <Share2 className="w-4 h-4" />
+                                        Compartilhar
+                                    </button>
+                                </div>
+
+                                {showComments && (
+                                    <div className="h-[500px] animate-in zoom-in-95 duration-300">
+                                        <CommentsSection questionId={currentQuestion.id} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

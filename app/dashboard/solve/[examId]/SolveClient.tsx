@@ -4,11 +4,12 @@ import { useAuth } from "../../../../context/AuthContext";
 import { useRef, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../../lib/firebase";
-import { doc, getDoc, updateDoc, increment, runTransaction } from "firebase/firestore";
-import { Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText, Coins } from "lucide-react";
+import { doc, getDoc, updateDoc, increment, runTransaction, setDoc, serverTimestamp } from "firebase/firestore";
+import { Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText, Coins, MessageSquare } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 import { FormattedText } from "../../../components/FormattedText";
+import { CommentsSection } from "../../../components/CommentsSection";
 
 interface SolveClientProps {
     examId: string;
@@ -42,7 +43,9 @@ export default function SolveClient({ examId }: SolveClientProps) {
     const [rewardAwarded, setRewardAwarded] = useState(false); // Prevent duplicate final rewards in the same session
 
     // Graphic Modal State
+    // Graphic Modal State
     const [showGraphicModal, setShowGraphicModal] = useState(false);
+    const [showComments, setShowComments] = useState(false);
 
     // Fetch Exam
     useEffect(() => {
@@ -136,6 +139,19 @@ export default function SolveClient({ examId }: SolveClientProps) {
         if (isCorrect && user && !answeredQuestions.has(currentIndex)) {
             if (currentIndex >= maxIndex) {
                 try {
+                    // Save attempt globally to Question Bank persistence
+                    const currentQ = exam.extractedData?.questions[currentIndex];
+                    if (currentQ && currentQ.id) {
+                        const attemptRef = doc(db, "users", user.uid, "questionAttempts", currentQ.id);
+                        setDoc(attemptRef, {
+                            questionId: currentQ.id,
+                            isCorrect,
+                            userAnswer: currentAnswer,
+                            lastAttemptAt: serverTimestamp(),
+                            examId: examId
+                        }, { merge: true }).catch(err => console.error("Error saving global attempt:", err));
+                    }
+
                     let startX = 0;
                     let startY = 0;
 
@@ -690,9 +706,26 @@ export default function SolveClient({ examId }: SolveClientProps) {
                                     })}
                                 </div>
 
+                                {currentQuestion?.id && (
+                                    <div className="w-full border-t border-slate-200 dark:border-slate-800 pt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                        <button
+                                            onClick={() => setShowComments(!showComments)}
+                                            className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 transition-colors mb-4"
+                                        >
+                                            <MessageSquare className="w-4 h-4" />
+                                            {showComments ? "Ocultar Comentários" : "Ver Comentários e Discussão"}
+                                        </button>
+
+                                        {showComments && (
+                                            <div className="h-[500px] animate-in zoom-in-95 duration-300">
+                                                <CommentsSection questionId={`${exam.id}_q${currentIndex}`} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="h-12 md:h-24 w-full shrink-0"></div>
                             </div>
-
                         </div>
                         {/* Footer Navigation */}
                         <div className="h-24 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 md:px-12 shrink-0 z-20">
@@ -705,7 +738,8 @@ export default function SolveClient({ examId }: SolveClientProps) {
                                 className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-violet-600 disabled:opacity-30 disabled:hover:text-slate-500 transition font-bold uppercase tracking-wider text-sm"
                             >
                                 <ChevronLeft className="w-5 h-5" />
-                                Anterior
+                                <span className="hidden md:inline">Anterior</span>
+                                <span className="md:hidden">Ant.</span>
                             </button>
 
                             <button
@@ -716,128 +750,131 @@ export default function SolveClient({ examId }: SolveClientProps) {
                                 <ChevronRight className="w-5 h-5" />
                             </button>
                         </div>
+
+                        {/* Modals */}
+                        {showAnswerKey && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowAnswerKey(false)}>
+                                <div className="bg-white dark:bg-slate-900 w-full max-md:max-w-md md:max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gabarito</h3>
+                                        <button onClick={() => setShowAnswerKey(false)} className="text-slate-400 hover:text-slate-600">
+                                            <XCircle className="w-6 h-6" />
+                                        </button>
+                                    </div>
+                                    {maxIndex === 0 ? (
+                                        <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                                            <p>Responda questões para ter acesso ao gabarito.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-5 gap-2">
+                                            {questions.map((q: any, idx: number) => {
+                                                if (idx >= maxIndex) return null;
+                                                const userAns = answers[idx];
+                                                let styleClass = "bg-slate-50 border-slate-200 text-slate-400";
+                                                if (userAns) {
+                                                    const isCorrect = userAns.toLowerCase() === q.correctAnswer?.toLowerCase();
+                                                    styleClass = isCorrect
+                                                        ? "bg-green-50 border-green-200 text-green-700"
+                                                        : "bg-red-50 border-red-200 text-red-700";
+                                                }
+                                                return (
+                                                    <div key={idx} className={clsx(
+                                                        "p-2 rounded text-center border text-sm font-bold transition-all",
+                                                        styleClass
+                                                    )}>
+                                                        <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
+                                                        {q.correctAnswer?.toUpperCase() || '-'}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {showSupportTextModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowSupportTextModal(false)}>
+                                <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
+                                    <div className="flex justify-between items-center mb-4 shrink-0">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                            <FileText className="w-5 h-5 text-purple-500" />
+                                            Textos de Apoio
+                                        </h3>
+                                        <button onClick={() => setShowSupportTextModal(false)} className="text-slate-400 hover:text-slate-600">
+                                            <XCircle className="w-6 h-6" />
+                                        </button>
+                                    </div>
+                                    <div className="space-y-6 overflow-y-auto">
+                                        {exam?.extractedData?.supportTexts
+                                            ?.filter((st: any) => st.associatedQuestions?.includes((currentIndex + 1).toString()))
+                                            .map((text: any, idx: number) => (
+                                                <div key={idx} className="bg-slate-50 dark:bg-slate-800 p-6 rounded-xl border border-slate-100 dark:border-slate-700">
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded text-sm">{text.id}</span>
+                                                    </div>
+                                                    <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                                                        {text.content}
+                                                    </p>
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showGraphicModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowGraphicModal(false)}>
+                                <div className="bg-transparent w-full max-w-4xl rounded-2xl p-2 relative animate-in zoom-in-95 flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                                    <button
+                                        onClick={() => setShowGraphicModal(false)}
+                                        className="absolute -top-10 right-0 text-white/70 hover:text-white transition"
+                                    >
+                                        <XCircle className="w-8 h-8" />
+                                    </button>
+                                    {currentQuestion?.graphicUrl && (
+                                        <img
+                                            src={currentQuestion.graphicUrl}
+                                            alt={`Gráfico da Questão ${currentIndex + 1}`}
+                                            className="max-w-full max-h-[80vh] rounded-lg shadow-2xl bg-white"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
-
-                    {/* Modals */}
-                    {showAnswerKey && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowAnswerKey(false)}>
-                            <div className="bg-white dark:bg-slate-900 w-full max-md:max-w-md md:max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">Gabarito</h3>
-                                    <button onClick={() => setShowAnswerKey(false)} className="text-slate-400 hover:text-slate-600">
-                                        <XCircle className="w-6 h-6" />
-                                    </button>
-                                </div>
-                                {maxIndex === 0 ? (
-                                    <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                                        <p>Responda questões para ter acesso ao gabarito.</p>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {questions.map((q: any, idx: number) => {
-                                            if (idx >= maxIndex) return null;
-                                            const userAns = answers[idx];
-                                            let styleClass = "bg-slate-50 border-slate-200 text-slate-400";
-                                            if (userAns) {
-                                                const isCorrect = userAns.toLowerCase() === q.correctAnswer?.toLowerCase();
-                                                styleClass = isCorrect
-                                                    ? "bg-green-50 border-green-200 text-green-700"
-                                                    : "bg-red-50 border-red-200 text-red-700";
-                                            }
-                                            return (
-                                                <div key={idx} className={clsx(
-                                                    "p-2 rounded text-center border text-sm font-bold transition-all",
-                                                    styleClass
-                                                )}>
-                                                    <div className="text-xs text-slate-400 font-normal mb-1">{idx + 1}</div>
-                                                    {q.correctAnswer?.toUpperCase() || '-'}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {showSupportTextModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowSupportTextModal(false)}>
-                            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[80vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-4 shrink-0">
-                                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                        <FileText className="w-5 h-5 text-purple-500" />
-                                        Textos de Apoio
-                                    </h3>
-                                    <button onClick={() => setShowSupportTextModal(false)} className="text-slate-400 hover:text-slate-600">
-                                        <XCircle className="w-6 h-6" />
-                                    </button>
-                                </div>
-                                <div className="space-y-6 overflow-y-auto">
-                                    {exam?.extractedData?.supportTexts
-                                        ?.filter((st: any) => st.associatedQuestions?.includes((currentIndex + 1).toString()))
-                                        .map((text: any, idx: number) => (
-                                            <div key={idx} className="bg-slate-50 dark:bg-slate-800 p-6 rounded-xl border border-slate-100 dark:border-slate-700">
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded text-sm">{text.id}</span>
-                                                </div>
-                                                <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                                                    {text.content}
-                                                </p>
-                                            </div>
-                                        ))
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showGraphicModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowGraphicModal(false)}>
-                            <div className="bg-transparent w-full max-w-4xl rounded-2xl p-2 relative animate-in zoom-in-95 flex flex-col items-center" onClick={e => e.stopPropagation()}>
-                                <button
-                                    onClick={() => setShowGraphicModal(false)}
-                                    className="absolute -top-10 right-0 text-white/70 hover:text-white transition"
-                                >
-                                    <XCircle className="w-8 h-8" />
-                                </button>
-                                {currentQuestion?.graphicUrl && (
-                                    <img
-                                        src={currentQuestion.graphicUrl}
-                                        alt={`Gráfico da Questão ${currentIndex + 1}`}
-                                        className="max-w-full max-h-[80vh] rounded-lg shadow-2xl bg-white"
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    )}
                 </div>
-            )}
+            )
+            }
 
             {/* Flying Coins */}
-            {flyingCoins.map(coin => (
-                <div
-                    key={coin.id}
-                    className="fixed z-[100] pointer-events-none w-8 h-8 text-yellow-500 animate-coin-fly"
-                    style={{
-                        left: coin.startX,
-                        top: coin.startY,
-                        animationDelay: `${coin.delay}s`,
-                        '--tx': `0px`,
-                        '--ty': `-100px`,
-                        '--target-x': `${(headersCreditsRef.current?.getBoundingClientRect().left ?? 0) + (headersCreditsRef.current?.offsetWidth ?? 0) / 2 - coin.startX - 16}px`,
-                        '--target-y': `${(headersCreditsRef.current?.getBoundingClientRect().top ?? 0) + (headersCreditsRef.current?.offsetHeight ?? 0) / 2 - coin.startY - 16}px`
-                    } as React.CSSProperties}
-                    onAnimationEnd={() => {
-                        setFlyingCoins(prev => prev.filter(c => c.id !== coin.id));
-                        setUserCredits(prev => prev + 1);
-                        setCreditPulse(true);
-                        if (coin.delay === 0 || coin.id % 5 === 0) playSound('success');
-                        setTimeout(() => setCreditPulse(false), 1000);
-                    }}
-                >
-                    <Coins className="w-full h-full fill-yellow-500 animate-[coinPulse_0.5s_linear_infinite]" />
-                </div>
-            ))}
+            {
+                flyingCoins.map(coin => (
+                    <div
+                        key={coin.id}
+                        className="fixed z-[100] pointer-events-none w-8 h-8 text-yellow-500 animate-coin-fly"
+                        style={{
+                            left: coin.startX,
+                            top: coin.startY,
+                            animationDelay: `${coin.delay}s`,
+                            '--tx': `0px`,
+                            '--ty': `-100px`,
+                            '--target-x': `${(headersCreditsRef.current?.getBoundingClientRect().left ?? 0) + (headersCreditsRef.current?.offsetWidth ?? 0) / 2 - coin.startX - 16}px`,
+                            '--target-y': `${(headersCreditsRef.current?.getBoundingClientRect().top ?? 0) + (headersCreditsRef.current?.offsetHeight ?? 0) / 2 - coin.startY - 16}px`
+                        } as React.CSSProperties}
+                        onAnimationEnd={() => {
+                            setFlyingCoins(prev => prev.filter(c => c.id !== coin.id));
+                            setUserCredits(prev => prev + 1);
+                            setCreditPulse(true);
+                            if (coin.delay === 0 || coin.id % 5 === 0) playSound('success');
+                            setTimeout(() => setCreditPulse(false), 1000);
+                        }}
+                    >
+                        <Coins className="w-full h-full fill-yellow-500 animate-[coinPulse_0.5s_linear_infinite]" />
+                    </div>
+                ))
+            }
         </div>
     );
 }

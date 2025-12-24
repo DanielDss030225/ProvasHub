@@ -4,7 +4,7 @@ import { useAuth } from "../../../../context/AuthContext";
 import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db, storage } from "../../../../lib/firebase";
-import { doc, getDoc, updateDoc, runTransaction, increment, collection, setDoc, Timestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, runTransaction, increment, collection, setDoc, Timestamp, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { Loader2, Save, ArrowLeft, AlertTriangle, FileText, Image as ImageIcon, Upload, CheckCircle, XCircle, Trash2, ExternalLink, Plus, Book, Zap, ChevronDown, Search, Menu, X, Home, Eye, EyeOff } from "lucide-react";
 import { FormattedText } from "../../../components/FormattedText";
@@ -64,12 +64,226 @@ const TIPO_OPTIONS = [
     { value: "certo_errado", label: "Certo ou Errado" }
 ];
 
+const INITIAL_BANCAS = [
+    { value: "CEBRASPE", label: "Cebraspe (Cespe)" },
+    { value: "FGV", label: "FGV" },
+    { value: "FCC", label: "FCC" },
+    { value: "VUNESP", label: "Vunesp" },
+    { value: "CESGRANRIO", label: "Cesgranrio" },
+    { value: "INSTITUTO_AOCP", label: "Instituto AOCP" },
+    { value: "AOCP", label: "AOCP" },
+    { value: "IBFC", label: "IBFC" },
+    { value: "IDIB", label: "IDIB" },
+    { value: "CONSULPLAN", label: "Consulplan" },
+    { value: "INSTITUTO_CONSULPLAN", label: "Instituto Consulplan" },
+    { value: "QUADRIX", label: "Quadrix" },
+    { value: "FUNDATEC", label: "Fundatec" },
+    { value: "IBAM", label: "IBAM" },
+    { value: "FUNCAB", label: "Funcab" },
+    { value: "FUMARC", label: "Fumarc" },
+    { value: "CETRO", label: "Cetro" },
+    { value: "IADES", label: "IADES" },
+    { value: "COPESE", label: "Copese" },
+    { value: "NUCEPE", label: "Nucepe" },
+    { value: "COMVEST", label: "Comvest" },
+    { value: "FEPESE", label: "Fepese" },
+    { value: "UECE", label: "UECE" },
+    { value: "FUVEST", label: "Fuvest" },
+    { value: "UNIFIL", label: "UniFil" },
+    { value: "GUALIMP", label: "Gualimp" },
+    { value: "AMEOSC", label: "Ameosc" },
+    { value: "OBJETIVA", label: "Objetiva Concursos" },
+    { value: "FAU", label: "FAU" },
+    { value: "MS_CONCURSOS", label: "MS Concursos" },
+    { value: "INSTITUTO_MAIS", label: "Instituto Mais" },
+    { value: "FUNRIO", label: "Funrio" },
+    { value: "COSEAC", label: "Coseac" },
+    { value: "COPERVE", label: "Coperve" },
+    { value: "CELETRO", label: "Celetro" },
+    { value: "LEGALLE", label: "Legalle" },
+    { value: "FUNDACAO_LA_SALLE", label: "Fundação La Salle" },
+    { value: "ADM_TEC", label: "ADM&TEC" },
+    { value: "AVANCA_SP", label: "Avança SP" },
+    { value: "IGEDUC", label: "IGEDUC" },
+    { value: "SELECON", label: "Selecon" },
+    { value: "IDECA", label: "Ideca" },
+    { value: "CPCON", label: "CPCON" },
+    { value: "IBGP", label: "IBGP" },
+    { value: "FUNDEP", label: "FUNDEP" },
+    { value: "FADESP", label: "Fadesp" },
+    { value: "FCM", label: "FCM" },
+    { value: "FAFIPA", label: "Fafipa" },
+    { value: "FAUEL", label: "Fauel" },
+    { value: "UNIOESTE", label: "Unioeste" },
+    { value: "COTUCA", label: "Cotuca" },
+    { value: "COVEST", label: "Covest" },
+    { value: "UFMT", label: "UFMT" },
+    { value: "UFPR", label: "UFPR" },
+    { value: "UFRJ", label: "UFRJ" },
+    { value: "UFG", label: "UFG" },
+    { value: "UFRGS", label: "UFRGS" },
+    { value: "UFSC", label: "UFSC" },
+    { value: "UFAM", label: "UFAM" },
+    { value: "UEPA", label: "UEPA" },
+    { value: "UEPB", label: "UEPB" },
+    { value: "UEPG", label: "UEPG" },
+    { value: "UEMA", label: "UEMA" },
+    { value: "UDESC", label: "UDESC" },
+    { value: "UNITINS", label: "Unitins" },
+    { value: "UNICAMP", label: "Unicamp" },
+    { value: "UNESP", label: "Unesp" },
+    { value: "UNIFESP", label: "Unifesp" },
+    { value: "UNIMONTES", label: "Unimontes" },
+    { value: "UNIR", label: "UNIR" },
+    { value: "IFSC", label: "IFSC" },
+    { value: "IFRS", label: "IFRS" },
+    { value: "IFRJ", label: "IFRJ" },
+    { value: "IFPE", label: "IFPE" },
+    { value: "IFPB", label: "IFPB" },
+    { value: "IFPA", label: "IFPA" },
+    { value: "IFMT", label: "IFMT" },
+    { value: "IFMS", label: "IFMS" },
+    { value: "IFMG", label: "IFMG" },
+    { value: "IFMA", label: "IFMA" },
+    { value: "IFGO", label: "IFGO" },
+    { value: "IFES", label: "IFES" },
+    { value: "IFCE", label: "IFCE" },
+    { value: "IFBA", label: "IFBA" },
+    { value: "IFAM", label: "IFAM" },
+    { value: "IFAL", label: "IFAL" },
+    { value: "IFAC", label: "IFAC" },
+    { value: "IFTO", label: "IFTO" },
+    { value: "IFSE", label: "IFSE" },
+    { value: "IFRN", label: "IFRN" },
+    { value: "IFRO", label: "IFRO" },
+    { value: "IFPR", label: "IFPR" },
+    { value: "IFPI", label: "IFPI" },
+    { value: "IFAP", label: "IFAP" },
+    { value: "IFRR", label: "IFRR" },
+    { value: "COLEGIO_PEDRO_II", label: "Colégio Pedro II" },
+    { value: "MPE_GO", label: "MPE-GO" },
+    { value: "MPE_RS", label: "MPE-RS" },
+    { value: "MPE_SC", label: "MPE-SC" },
+    { value: "MPE_SP", label: "MPE-SP" },
+    { value: "MPE_PR", label: "MPE-PR" },
+    { value: "MPE_MG", label: "MPE-MG" },
+    { value: "MPE_RJ", label: "MPE-RJ" },
+    { value: "MPE_BA", label: "MPE-BA" },
+    { value: "MPE_PE", label: "MPE-PE" },
+    { value: "MPE_CE", label: "MPE-CE" },
+    { value: "MPE_PA", label: "MPE-PA" },
+    { value: "TJ_SP", label: "TJ-SP" },
+    { value: "TJ_RJ", label: "TJ-RJ" },
+    { value: "TJ_MG", label: "TJ-MG" },
+    { value: "TJ_RS", label: "TJ-RS" },
+    { value: "TJ_PR", label: "TJ-PR" },
+    { value: "TJ_SC", label: "TJ-SC" },
+    { value: "TJ_GO", label: "TJ-GO" },
+    { value: "TJ_BA", label: "TJ-BA" },
+    { value: "TJ_PE", label: "TJ-PE" },
+    { value: "TJ_CE", label: "TJ-CE" },
+    { value: "TJ_PA", label: "TJ-PA" },
+    { value: "TJ_MA", label: "TJ-MA" },
+    { value: "TJ_ES", label: "TJ-ES" },
+    { value: "TJ_DF", label: "TJ-DF" },
+    { value: "TRF_1", label: "TRF-1" },
+    { value: "TRF_2", label: "TRF-2" },
+    { value: "TRF_3", label: "TRF-3" },
+    { value: "TRF_4", label: "TRF-4" },
+    { value: "TRF_5", label: "TRF-5" },
+    { value: "TRT_1", label: "TRT-1 (RJ)" },
+    { value: "TRT_2", label: "TRT-2 (SP Capital)" },
+    { value: "TRT_3", label: "TRT-3 (MG)" },
+    { value: "TRT_4", label: "TRT-4 (RS)" },
+    { value: "TRT_5", label: "TRT-5 (BA)" },
+    { value: "TRT_6", label: "TRT-6 (PE)" },
+    { value: "TRT_7", label: "TRT-7 (CE)" },
+    { value: "TRT_8", label: "TRT-8 (PA/AP)" },
+    { value: "TRT_9", label: "TRT-9 (PR)" },
+    { value: "TRT_10", label: "TRT-10 (DF/TO)" },
+    { value: "TRT_11", label: "TRT-11 (AM/RR)" },
+    { value: "TRT_12", label: "TRT-12 (SC)" },
+    { value: "TRT_13", label: "TRT-13 (PB)" },
+    { value: "TRT_14", label: "TRT-14 (RO/AC)" },
+    { value: "TRT_15", label: "TRT-15 (SP Campinas)" },
+    { value: "TRT_16", label: "TRT-16 (MA)" },
+    { value: "TRT_17", label: "TRT-17 (ES)" },
+    { value: "TRT_18", label: "TRT-18 (GO)" },
+    { value: "TRT_19", label: "TRT-19 (AL)" },
+    { value: "TRT_20", label: "TRT-20 (SE)" },
+    { value: "TRT_21", label: "TRT-21 (RN)" },
+    { value: "TRT_22", label: "TRT-22 (PI)" },
+    { value: "TRT_23", label: "TRT-23 (MT)" },
+    { value: "TRT_24", label: "TRT-24 (MS)" },
+    { value: "TRE_SP", label: "TRE-SP" },
+    { value: "TRE_RJ", label: "TRE-RJ" },
+    { value: "TRE_MG", label: "TRE-MG" },
+    { value: "TRE_RS", label: "TRE-RS" },
+    { value: "TRE_PR", label: "TRE-PR" },
+    { value: "TRE_SC", label: "TRE-SC" },
+    { value: "TRE_GO", label: "TRE-GO" },
+    { value: "TRE_BA", label: "TRE-BA" },
+    { value: "TRE_PE", label: "TRE-PE" },
+    { value: "TRE_CE", label: "TRE-CE" },
+    { value: "TRE_PA", label: "TRE-PA" },
+    { value: "TRE_MA", label: "TRE-MA" },
+].sort((a, b) => a.label.localeCompare(b.label));
+
+const INITIAL_CARGOS = [
+    { value: "AGENTE ADMINISTRATIVO", label: "Agente Administrativo" },
+    { value: "AGENTE DE POLICIA", label: "Agente de Polícia" },
+    { value: "ANALISTA", label: "Analista" },
+    { value: "ANALISTA JUDICIARIO", label: "Analista Judiciário" },
+    { value: "ASSISTENTE", label: "Assistente" },
+    { value: "ASSISTENTE SOCIAL", label: "Assistente Social" },
+    { value: "AUDITOR", label: "Auditor" },
+    { value: "AUDITOR FISCAL", label: "Auditor Fiscal" },
+    { value: "AUXILIAR", label: "Auxiliar" },
+    { value: "BIBLIOTECARIO", label: "Bibliotecário" },
+    { value: "BIOLOGO", label: "Biólogo" },
+    { value: "BOMBEIRO", label: "Bombeiro" },
+    { value: "CONTADOR", label: "Contador" },
+    { value: "DEFENSOR PUBLICO", label: "Defensor Público" },
+    { value: "DELEGADO", label: "Delegado" },
+    { value: "DENTISTA", label: "Dentista" },
+    { value: "DESEMBARGADOR", label: "Desembargador" },
+    { value: "ECONOMISTA", label: "Economista" },
+    { value: "ENFERMEIRO", label: "Enfermeiro" },
+    { value: "ENGENHEIRO", label: "Engenheiro" },
+    { value: "ESCREVENTE", label: "Escrevente" },
+    { value: "ESCRIVAO", label: "Escrivão" },
+    { value: "ESPECIALISTA", label: "Especialista" },
+    { value: "FARMACEUTICO", label: "Farmacêutico" },
+    { value: "FISCAL", label: "Fiscal" },
+    { value: "FISIOTERAPEUTA", label: "Fisioterapeuta" },
+    { value: "GUARDA MUNICIPAL", label: "Guarda Municipal" },
+    { value: "INSPETOR", label: "Inspetor" },
+    { value: "JUIZ", label: "Juiz" },
+    { value: "MEDICO", label: "Médico" },
+    { value: "MOTORISTA", label: "Motorista" },
+    { value: "NUTRICIONISTA", label: "Nutricionista" },
+    { value: "OFICIAL", label: "Oficial" },
+    { value: "OFICIAL DE JUSTICA", label: "Oficial de Justiça" },
+    { value: "ODONTOLOGO", label: "Odontólogo" },
+    { value: "PERITO", label: "Perito" },
+    { value: "POLICIAL", label: "Policial" },
+    { value: "PROCURADOR", label: "Procurador" },
+    { value: "PROFESSOR", label: "Professor" },
+    { value: "PSICOLOGO", label: "Psicólogo" },
+    { value: "SOLDADO", label: "Soldado" },
+    { value: "TECNICO", label: "Técnico" },
+    { value: "TECNICO ADMINISTRATIVO", label: "Técnico Administrativo" },
+    { value: "TECNICO JUDICIARIO", label: "Técnico Judiciário" },
+    { value: "TECNICO DE ENFERMAGEM", label: "Técnico de Enfermagem" },
+    { value: "VETERINARIO", label: "Veterinário" },
+].sort((a, b) => a.label.localeCompare(b.label));
+
 const ANO_OPTIONS = Array.from({ length: new Date().getFullYear() - 2014 }, (_, i) => {
     const year = (2015 + i).toString();
     return { value: year, label: year };
 }).reverse();
 
-const SearchableSelect = ({ value, onChange, options, placeholder, className, showSearch = true, disabled = false }: {
+const SearchableSelect = ({ value, onChange, options, placeholder, className, showSearch = true, disabled = false, allowCustom = false }: {
     value: string;
     onChange: (val: string) => void;
     options: { value: string, label: string }[];
@@ -77,6 +291,7 @@ const SearchableSelect = ({ value, onChange, options, placeholder, className, sh
     className?: string;
     showSearch?: boolean;
     disabled?: boolean;
+    allowCustom?: boolean;
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -97,7 +312,8 @@ const SearchableSelect = ({ value, onChange, options, placeholder, className, sh
         opt.value.toLowerCase().includes(search.toLowerCase())
     );
 
-    const selectedLabel = options.find(opt => opt.value === value)?.label || placeholder;
+    // FIX: Show value if not found in options (fallback to allow custom values display)
+    const selectedLabel = options.find(opt => opt.value === value)?.label || value || placeholder;
 
     return (
         <div className={clsx("relative", className)} ref={wrapperRef}>
@@ -119,7 +335,7 @@ const SearchableSelect = ({ value, onChange, options, placeholder, className, sh
 
             {isOpen && (
                 <div className="absolute z-[60] mt-1 w-full min-w-[200px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                    {showSearch && options.length > 5 && (
+                    {showSearch && (options.length > 5 || allowCustom) && (
                         <div className="p-2 border-b border-slate-100 dark:border-slate-800">
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
@@ -154,6 +370,19 @@ const SearchableSelect = ({ value, onChange, options, placeholder, className, sh
                             ))
                         ) : (
                             <div className="px-4 py-3 text-[10px] text-slate-400 font-bold uppercase text-center">Nenhum resultado encontrado</div>
+                        )}
+
+                        {allowCustom && search && !filteredOptions.some(o => o.label.toLowerCase() === search.toLowerCase()) && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onChange(search);
+                                    setIsOpen(false);
+                                }}
+                                className="w-full px-4 py-2 text-left text-xs font-bold text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/10 transition-colors border-t border-slate-100 dark:border-slate-800"
+                            >
+                                + Usar "{search}"
+                            </button>
                         )}
                     </div>
                 </div>
@@ -211,6 +440,52 @@ export default function ReviewPage({ params }: PageProps) {
     const [parsingAnswerKey, setParsingAnswerKey] = useState(false);
     const [answerKeyResult, setAnswerKeyResult] = useState<AnswerKeyResult | null>(null);
     const answerKeyInputRef = useRef<HTMLInputElement>(null);
+
+    const [bancasOptions, setBancasOptions] = useState<{ value: string, label: string }[]>(INITIAL_BANCAS);
+    const [cargosOptions, setCargosOptions] = useState<{ value: string, label: string }[]>(INITIAL_CARGOS);
+
+    // Sync Bancas with Firestore
+    useEffect(() => {
+        const bancasRef = doc(db, "settings", "bancas");
+
+        const unsubscribe = onSnapshot(bancasRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data.list && Array.isArray(data.list)) {
+                    // Sort alphabetically
+                    const sorted = [...data.list].sort((a, b) => a.label.localeCompare(b.label));
+                    setBancasOptions(sorted);
+                }
+            } else {
+                // Determine if we should seed (only one client should do this ideally, but setDoc with merge is safe enough or just set)
+                // To avoid race conditions in a real app we might want a script, but here "first come first serve" self-healing is fine.
+                setDoc(bancasRef, { list: INITIAL_BANCAS })
+                    .catch(err => console.error("Error seeding bancas:", err));
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Sync Cargos with Firestore
+    useEffect(() => {
+        const cargosRef = doc(db, "settings", "cargos");
+
+        const unsubscribe = onSnapshot(cargosRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data.list && Array.isArray(data.list)) {
+                    const sorted = [...data.list].sort((a, b) => a.label.localeCompare(b.label));
+                    setCargosOptions(sorted);
+                }
+            } else {
+                setDoc(cargosRef, { list: INITIAL_CARGOS })
+                    .catch(err => console.error("Error seeding cargos:", err));
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
 
     // --- Answer Key Parsers ---
     const parseAnswerKeyTXT = (content: string): Record<number, string> => {
@@ -453,6 +728,92 @@ export default function ReviewPage({ params }: PageProps) {
         return "";
     };
 
+    const detectBanca = (text: string, bancasList: { value: string, label: string }[]) => {
+        const upper = text.toUpperCase();
+
+        // Helper for similarity
+        const levenshtein = (a: string, b: string): number => {
+            const matrix: number[][] = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                    }
+                }
+            }
+            return matrix[b.length][a.length];
+        };
+
+        const similarity = (a: string, b: string): number => {
+            const longer = a.length > b.length ? a : b;
+            const shorter = a.length > b.length ? b : a;
+            if (longer.length === 0) return 1.0;
+            return (longer.length - levenshtein(longer, shorter)) / longer.length;
+        };
+
+        // Check each banca in the list
+        for (const banca of bancasList) {
+            const bancaUpper = banca.value.toUpperCase();
+            // Direct inclusion check
+            if (upper.includes(bancaUpper) || bancaUpper.includes(upper.trim())) {
+                return banca.value;
+            }
+            // Fuzzy match with 80% threshold for detection
+            const sim = similarity(upper, bancaUpper);
+            if (sim >= 0.8) {
+                return banca.value;
+            }
+        }
+        return "";
+    };
+
+    const detectCargo = (text: string, cargosList: { value: string, label: string }[]) => {
+        const upper = text.toUpperCase();
+
+        // Helper for similarity
+        const levenshtein = (a: string, b: string): number => {
+            const matrix: number[][] = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+                    }
+                }
+            }
+            return matrix[b.length][a.length];
+        };
+
+        const similarity = (a: string, b: string): number => {
+            const longer = a.length > b.length ? a : b;
+            const shorter = a.length > b.length ? b : a;
+            if (longer.length === 0) return 1.0;
+            return (longer.length - levenshtein(longer, shorter)) / longer.length;
+        };
+
+        // Check each cargo in the list
+        for (const cargo of cargosList) {
+            const cargoUpper = cargo.value.toUpperCase();
+            // Direct inclusion check
+            if (upper.includes(cargoUpper) || cargoUpper.includes(upper.trim())) {
+                return cargo.value;
+            }
+            // Fuzzy match with 80% threshold for detection
+            const sim = similarity(upper, cargoUpper);
+            if (sim >= 0.8) {
+                return cargo.value;
+            }
+        }
+        return "";
+    };
+
     const fetchExam = async (id: string) => {
         try {
             const docRef = doc(db, "exams", id);
@@ -481,20 +842,45 @@ export default function ReviewPage({ params }: PageProps) {
                     detectEstado(examData.extractedData.title || "") ||
                     examData.extractedData.metadata?.estado || "";
 
+                // Detect Banca and Cargo from exam title/filename
+                const detectedBanca = detectBanca(examData.fileName || "", bancasOptions) ||
+                    detectBanca(examData.extractedData.title || "", bancasOptions) ||
+                    examData.extractedData.metadata?.banca || "";
+
+                const detectedCargo = detectCargo(examData.fileName || "", cargosOptions) ||
+                    detectCargo(examData.extractedData.title || "", cargosOptions) ||
+                    examData.extractedData.metadata?.cargo || "";
+
                 // Ensure all questions have basic metadata fields
-                const questions = examData.extractedData.questions.map((q: any) => ({
-                    ...q,
-                    concurso: (q.concurso || examData.extractedData.metadata?.concurso || "").substring(0, 30),
-                    banca: q.banca || examData.extractedData.metadata?.banca || "",
-                    cargo: (q.cargo || examData.extractedData.metadata?.cargo || "").substring(0, 30),
-                    nivel: q.nivel || detectedNivel,
-                    ano: q.ano || detectedAno,
-                    tipoQuestao: q.tipoQuestao || examData.extractedData.metadata?.tipoQuestao || "multipla_escolha",
-                    disciplina: q.disciplina || detectDisciplina(q.text) || examData.extractedData.course || "",
-                    estado: q.estado || detectedEstado,
-                    municipio: q.municipio || examData.extractedData.metadata?.municipio || "",
-                    confidence: q.confidence || 1.0
-                }));
+                const questions = examData.extractedData.questions.map((q: any) => {
+                    // Auto-detect question type based on number of options
+                    let questionType = q.tipoQuestao || examData.extractedData.metadata?.tipoQuestao;
+
+                    // If type is not set or is empty, apply smart detection
+                    if (!questionType || questionType === "") {
+                        // If question has exactly 2 options, it's True/False
+                        if (q.options && q.options.length === 2) {
+                            questionType = "certo_errado";
+                        } else {
+                            // Otherwise, default to Multiple Choice
+                            questionType = "multipla_escolha";
+                        }
+                    }
+
+                    return {
+                        ...q,
+                        concurso: (q.concurso || examData.extractedData.metadata?.concurso || "").substring(0, 30),
+                        banca: q.banca || detectedBanca,
+                        cargo: (q.cargo || detectedCargo).substring(0, 20),
+                        nivel: q.nivel || detectedNivel,
+                        ano: q.ano || detectedAno,
+                        tipoQuestao: questionType,
+                        disciplina: q.disciplina || detectDisciplina(q.text) || examData.extractedData.course || "",
+                        estado: q.estado || detectedEstado,
+                        municipio: q.municipio || examData.extractedData.metadata?.municipio || "",
+                        confidence: q.confidence || 1.0
+                    };
+                });
 
                 // Normalize support texts (ensure they use 'text' field)
                 const supportTexts = (examData.extractedData.supportTexts || []).map((st: any) => ({
@@ -553,12 +939,26 @@ export default function ReviewPage({ params }: PageProps) {
     const handleUpdate = async () => {
         if (!exam) return;
 
-        const hasKey = exam.extractedData.answerKeyResult || answerKeyResult;
+        // Improved Answer Key Detection: Check percentage of questions with correct answers
+        const questions = [...exam.extractedData.questions];
+        const questionsWithAnswers = questions.filter(q => q.correctAnswer && q.correctAnswer.trim().length > 0).length;
+        const answerPercentage = questions.length > 0 ? (questionsWithAnswers / questions.length) : 0;
+
+        // Consider the exam has a valid answer key if:
+        // 1. Has answerKeyResult from import OR
+        // 2. At least 40% of questions have correctAnswer filled
+        const hasKey = !!(exam.extractedData.answerKeyResult || answerKeyResult) || answerPercentage >= 0.4;
+
+        console.log("=== ANSWER KEY DETECTION ===");
+        console.log("Total Questions:", questions.length);
+        console.log("Questions with Answers:", questionsWithAnswers);
+        console.log("Answer Percentage:", (answerPercentage * 100).toFixed(1) + "%");
+        console.log("Has AnswerKeyResult:", !!(exam.extractedData.answerKeyResult || answerKeyResult));
+        console.log("Final hasKey:", hasKey);
 
         const processSave = async () => {
             setSaving(true);
             try {
-                const questions = [...exam.extractedData.questions];
                 let hasUploads = false;
 
                 for (let i = 0; i < questions.length; i++) {
@@ -577,6 +977,11 @@ export default function ReviewPage({ params }: PageProps) {
                     }
                 }
 
+                // Ensure every question has its ID persisted in the exam document
+                for (let i = 0; i < questions.length; i++) {
+                    questions[i] = { ...questions[i], id: `${exam.id}_q${i}` };
+                }
+
                 await runTransaction(db, async (transaction) => {
                     const examRef = doc(db, "exams", exam.id);
                     const userRef = user ? doc(db, "users", user.uid) : null;
@@ -593,6 +998,12 @@ export default function ReviewPage({ params }: PageProps) {
                     const examDataDb = examDoc.data();
                     const alreadyAwarded = examDataDb.creditsAwarded || false;
                     const shouldAward = hasKey && !alreadyAwarded;
+
+                    console.log("=== CREDITS AWARD LOGIC ===");
+                    console.log("Already Awarded:", alreadyAwarded);
+                    console.log("Should Award:", shouldAward);
+                    console.log("User Doc Exists:", userDoc?.exists());
+                    console.log("User UID:", user?.uid);
 
                     // ALL WRITES SECOND
 
@@ -634,6 +1045,18 @@ export default function ReviewPage({ params }: PageProps) {
                         const q = questions[i];
                         const questionRef = doc(db, "questions", `${exam.id}_q${i}`);
 
+                        // Auto-detect question type on save as well
+                        let questionType = q.tipoQuestao;
+                        if (!questionType || questionType === "") {
+                            // If question has exactly 2 options, it's True/False
+                            if (q.options && q.options.length === 2) {
+                                questionType = "certo_errado";
+                            } else {
+                                // Otherwise, default to Multiple Choice
+                                questionType = "multipla_escolha";
+                            }
+                        }
+
                         transaction.set(questionRef, {
                             text: q.text,
                             options: q.options || [],
@@ -652,7 +1075,7 @@ export default function ReviewPage({ params }: PageProps) {
                             ano: Number(q.ano) || new Date().getFullYear(),
                             estado: q.estado || "",
                             municipio: q.municipio || "",
-                            tipoQuestao: q.tipoQuestao || "multipla_escolha",
+                            tipoQuestao: questionType,
                             createdAt: Timestamp.now(),
                             isVerified: !!hasKey,
                             createdBy: user!.uid,
@@ -671,12 +1094,25 @@ export default function ReviewPage({ params }: PageProps) {
                         }
                     }
 
+                    // Award Credits
                     if (shouldAward && userRef && userDoc?.exists()) {
+                        console.log("✅ AWARDING 75 CREDITS TO USER:", user?.uid);
                         transaction.update(userRef, { credits: increment(75) });
+                    } else if (shouldAward && (!userRef || !userDoc?.exists())) {
+                        console.error("❌ CANNOT AWARD: User document does not exist");
+                    } else if (!shouldAward && alreadyAwarded) {
+                        console.log("ℹ️ CREDITS ALREADY AWARDED PREVIOUSLY");
+                    } else {
+                        console.log("ℹ️ NO AWARD: hasKey =", hasKey, "alreadyAwarded =", alreadyAwarded);
                     }
                 });
 
-                showAlert("Prova salva e Banco de Questões atualizado!", "success");
+                if (hasKey && !exam.creditsAwarded) {
+                    showAlert("Prova salva com sucesso! Você recebeu +75 créditos! 🎉", "success");
+                } else {
+                    showAlert("Prova salva e Banco de Questões atualizado!", "success");
+                }
+
                 router.push(`/dashboard/solve/${exam.id}`);
                 setHasUnsavedChanges(false);
             } catch (e: any) {
@@ -690,7 +1126,7 @@ export default function ReviewPage({ params }: PageProps) {
         // Warning if no answer key, wait for confirmation
         if (!hasKey) {
             showAlert(
-                "Sua prova será salva, mas os 75 créditos de revisão só serão liberados quando você importar o gabarito oficial.",
+                "Sua prova será salva, mas os 75 créditos de revisão só serão liberados quando você importar o gabarito oficial ou preencher pelo menos 40% das respostas corretas.",
                 "warning",
                 "Gabarito Pendente",
                 processSave // Proceed only after OK
@@ -1244,21 +1680,158 @@ export default function ReviewPage({ params }: PageProps) {
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Banca Examinadora</label>
-                                                <input
-                                                    type="text"
+                                                <SearchableSelect
                                                     value={q.banca || ""}
-                                                    onChange={(e) => updateQuestion(idx, 'banca', e.target.value)}
-                                                    className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500/30 transition-all"
+                                                    onChange={(v) => {
+                                                        // Enforce 20 character limit
+                                                        const trimmedValue = v.slice(0, 20);
+                                                        const upperValue = trimmedValue.toUpperCase();
+
+                                                        // Helper function: Levenshtein distance for similarity
+                                                        const levenshtein = (a: string, b: string): number => {
+                                                            const matrix: number[][] = [];
+                                                            for (let i = 0; i <= b.length; i++) {
+                                                                matrix[i] = [i];
+                                                            }
+                                                            for (let j = 0; j <= a.length; j++) {
+                                                                matrix[0][j] = j;
+                                                            }
+                                                            for (let i = 1; i <= b.length; i++) {
+                                                                for (let j = 1; j <= a.length; j++) {
+                                                                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                                                                        matrix[i][j] = matrix[i - 1][j - 1];
+                                                                    } else {
+                                                                        matrix[i][j] = Math.min(
+                                                                            matrix[i - 1][j - 1] + 1,
+                                                                            matrix[i][j - 1] + 1,
+                                                                            matrix[i - 1][j] + 1
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+                                                            return matrix[b.length][a.length];
+                                                        };
+
+                                                        const similarity = (a: string, b: string): number => {
+                                                            const longer = a.length > b.length ? a : b;
+                                                            const shorter = a.length > b.length ? b : a;
+                                                            if (longer.length === 0) return 1.0;
+                                                            return (longer.length - levenshtein(longer, shorter)) / longer.length;
+                                                        };
+
+                                                        // Check for exact match or high similarity (70%+)
+                                                        let finalValue = upperValue;
+                                                        let foundSimilar = false;
+
+                                                        for (const opt of bancasOptions) {
+                                                            const optUpper = opt.value.toUpperCase();
+                                                            if (optUpper === upperValue) {
+                                                                // Exact match
+                                                                finalValue = opt.value;
+                                                                foundSimilar = true;
+                                                                break;
+                                                            }
+                                                            const sim = similarity(upperValue, optUpper);
+                                                            if (sim >= 0.7) {
+                                                                // 70%+ similar - force use of existing
+                                                                finalValue = opt.value;
+                                                                foundSimilar = true;
+                                                                break;
+                                                            }
+                                                        }
+
+                                                        updateQuestion(idx, 'banca', finalValue);
+
+                                                        // Only add to Firestore if it's truly new and valid
+                                                        if (!foundSimilar && finalValue.trim().length > 2) {
+                                                            const newValue = { value: finalValue, label: finalValue };
+                                                            const bancasRef = doc(db, "settings", "bancas");
+                                                            updateDoc(bancasRef, {
+                                                                list: arrayUnion(newValue)
+                                                            }).catch(console.error);
+                                                        }
+                                                    }}
+                                                    options={bancasOptions}
+                                                    placeholder="Selecione ou digite"
+                                                    allowCustom={true}
                                                 />
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-black uppercase tracking-tighter text-slate-400 px-1">Cargo / Função</label>
-                                                <input
-                                                    type="text"
+                                                <SearchableSelect
                                                     value={q.cargo || ""}
-                                                    maxLength={30}
-                                                    onChange={(e) => updateQuestion(idx, 'cargo', e.target.value)}
-                                                    className="w-full bg-slate-50 dark:bg-slate-800/50 border-none rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-200 outline-none focus:ring-1 focus:ring-violet-500/30 transition-all"
+                                                    onChange={(v) => {
+                                                        // Enforce 20 character limit
+                                                        const trimmedValue = v.slice(0, 20);
+                                                        const upperValue = trimmedValue.toUpperCase();
+
+                                                        // Helper function: Levenshtein distance for similarity
+                                                        const levenshtein = (a: string, b: string): number => {
+                                                            const matrix: number[][] = [];
+                                                            for (let i = 0; i <= b.length; i++) {
+                                                                matrix[i] = [i];
+                                                            }
+                                                            for (let j = 0; j <= a.length; j++) {
+                                                                matrix[0][j] = j;
+                                                            }
+                                                            for (let i = 1; i <= b.length; i++) {
+                                                                for (let j = 1; j <= a.length; j++) {
+                                                                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                                                                        matrix[i][j] = matrix[i - 1][j - 1];
+                                                                    } else {
+                                                                        matrix[i][j] = Math.min(
+                                                                            matrix[i - 1][j - 1] + 1,
+                                                                            matrix[i][j - 1] + 1,
+                                                                            matrix[i - 1][j] + 1
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+                                                            return matrix[b.length][a.length];
+                                                        };
+
+                                                        const similarity = (a: string, b: string): number => {
+                                                            const longer = a.length > b.length ? a : b;
+                                                            const shorter = a.length > b.length ? b : a;
+                                                            if (longer.length === 0) return 1.0;
+                                                            return (longer.length - levenshtein(longer, shorter)) / longer.length;
+                                                        };
+
+                                                        // Check for exact match or high similarity (70%+)
+                                                        let finalValue = upperValue;
+                                                        let foundSimilar = false;
+
+                                                        for (const opt of cargosOptions) {
+                                                            const optUpper = opt.value.toUpperCase();
+                                                            if (optUpper === upperValue) {
+                                                                // Exact match
+                                                                finalValue = opt.value;
+                                                                foundSimilar = true;
+                                                                break;
+                                                            }
+                                                            const sim = similarity(upperValue, optUpper);
+                                                            if (sim >= 0.7) {
+                                                                // 70%+ similar - force use of existing
+                                                                finalValue = opt.value;
+                                                                foundSimilar = true;
+                                                                break;
+                                                            }
+                                                        }
+
+                                                        updateQuestion(idx, 'cargo', finalValue);
+
+                                                        // Only add to Firestore if it's truly new and valid
+                                                        if (!foundSimilar && finalValue.trim().length > 2) {
+                                                            const newValue = { value: finalValue, label: finalValue };
+                                                            const cargosRef = doc(db, "settings", "cargos");
+                                                            updateDoc(cargosRef, {
+                                                                list: arrayUnion(newValue)
+                                                            }).catch(console.error);
+                                                        }
+                                                    }}
+                                                    options={cargosOptions}
+                                                    placeholder="Selecione ou digite"
+                                                    allowCustom={true}
                                                 />
                                             </div>
                                             <div className="space-y-1">

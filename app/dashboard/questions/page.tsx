@@ -5,8 +5,10 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
-import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft, User, AlertTriangle } from "lucide-react";
+import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft, User, AlertTriangle, CheckCircle, XCircle, MessageSquare, Coins } from "lucide-react";
 import { FormattedText } from "../../components/FormattedText";
+import { CommentsSection } from "../../components/CommentsSection";
+import { QuestionCard } from "../../components/QuestionCard";
 import clsx from "clsx";
 
 interface QuestionBankItem {
@@ -72,6 +74,7 @@ export default function QuestionBankPage() {
     const router = useRouter();
     const [isSigningInToSolve, setIsSigningInToSolve] = useState(false);
 
+    const [allQuestions, setAllQuestions] = useState<QuestionBankItem[]>([]);
     const [questions, setQuestions] = useState<QuestionBankItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [visibleCount, setVisibleCount] = useState(20);
@@ -104,133 +107,128 @@ export default function QuestionBankPage() {
     });
 
     const [searchQuery, setSearchQuery] = useState("");
+    const [questionAttempts, setQuestionAttempts] = useState<Map<string, { isCorrect: boolean }>>(new Map());
+    const [activeQuestionIdForComments, setActiveQuestionIdForComments] = useState<string | null>(null);
 
-    // Removed automatic redirect to allow guest browsing
+    // Answer tracking for vertical list
+    const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [results, setResults] = useState<Record<string, boolean>>({});
+    const [answeredQuestions, setAnsweredQuestions] = useState<Set<string>>(new Set());
+    const [userCredits, setUserCredits] = useState(0);
+    const [showFilters, setShowFilters] = useState(false);
 
-    const fetchAllDynamicOptions = useCallback(async () => {
-        try {
-            // Fetch a larger sample to get representative filter options
-            const q = query(collection(db, "questions"), limit(500));
-            const snapshot = await getDocs(q);
+    // Fetch User Question Attempts
+    useEffect(() => {
+        if (!user) return;
 
-            const concursos = new Set<string>();
-            const bancas = new Set<string>();
-            const cargos = new Set<string>();
-            const niveis = new Set<string>();
-            const disciplinas = new Set<string>();
-            const anos = new Set<string>();
-            const estados = new Set<string>();
-            const municipios = new Set<string>();
-
-            snapshot.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.concurso) concursos.add(data.concurso);
-                if (data.banca) bancas.add(data.banca);
-                if (data.cargo) cargos.add(data.cargo);
-                if (data.nivel) niveis.add(data.nivel);
-                if (data.disciplina) disciplinas.add(data.disciplina);
-                if (data.ano) anos.add(String(data.ano));
-                if (data.estado) estados.add(data.estado);
-                if (data.municipio) municipios.add(data.municipio);
-            });
-
-            // Helper to title case and unify options
-            const unifyOptions = (set: Set<string>) => {
-                const map = new Map<string, string>();
-                Array.from(set).forEach(val => {
-                    const norm = normalizeText(val);
-                    if (!map.has(norm)) {
-                        map.set(norm, val); // Keep first occurrence as display label
-                    }
+        const fetchAttempts = async () => {
+            try {
+                const attemptsRef = collection(db, "users", user.uid, "questionAttempts");
+                const qAttempts = query(attemptsRef);
+                const snap = await getDocs(qAttempts);
+                const map = new Map<string, { isCorrect: boolean }>();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    map.set(doc.id, { isCorrect: data.isCorrect });
                 });
-                return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
-            };
+                setQuestionAttempts(map);
+            } catch (err) {
+                console.error("Error fetching question attempts:", err);
+            }
+        };
 
-            setDynamicOptions(prev => ({
-                ...prev,
-                concursos: unifyOptions(concursos),
-                bancas: unifyOptions(bancas),
-                cargos: unifyOptions(cargos),
-                niveis: Array.from(niveis).sort(), // Levels are usually short and standardized
-                disciplinas: unifyOptions(disciplinas),
-                anos: Array.from(anos).sort((a, b) => Number(b) - Number(a)),
-                estados: unifyOptions(estados),
-                municipios: unifyOptions(municipios),
-            }));
-        } catch (e) {
-            console.error("Error fetching dynamic options:", e);
-        }
+        fetchAttempts();
+    }, [user]);
+
+    // 1. Initial Data Fetch (One time)
+    useEffect(() => {
+        const fetchInitialQuestions = async () => {
+            setLoading(true);
+            try {
+                // Fetch a large enough batch to populate filters and browse
+                const q = query(collection(db, "questions"), orderBy("createdAt", "desc"), limit(2000));
+                const snapshot = await getDocs(q);
+
+                // Use a Map to ensure unique IDs from the source
+                const resultsMap = new Map<string, QuestionBankItem>();
+                snapshot.docs.forEach(doc => {
+                    resultsMap.set(doc.id, { id: doc.id, ...doc.data() } as QuestionBankItem);
+                });
+                setAllQuestions(Array.from(resultsMap.values()));
+            } catch (e) {
+                console.error("Error fetching initial questions:", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchInitialQuestions();
     }, []);
 
-    // Fetch dynamic options from DB on load
+    // 2. Dynamic Filtering Logic (Facets)
     useEffect(() => {
-        fetchAllDynamicOptions();
-    }, [fetchAllDynamicOptions]);
+        // Apply Global Filters to the main list
+        let filtered = [...allQuestions];
 
-    const fetchAndFilterQuestions = useCallback(async () => {
-        setLoading(true);
+        const applyFilters = (items: QuestionBankItem[], currentFilters: FilterState, skipKey?: keyof FilterState) => {
+            let res = items;
+            Object.entries(currentFilters).forEach(([key, value]) => {
+                if (value && key !== skipKey) {
+                    const normFilter = normalizeText(value);
+                    if (key === 'ano') {
+                        res = res.filter(q => String(q.ano) === value);
+                    } else if (key === 'tipoQuestao') {
+                        res = res.filter(q => q.tipoQuestao === value);
+                    } else {
+                        res = res.filter(q => normalizeText((q as any)[key] || "").includes(normFilter));
+                    }
+                }
+            });
+            return res;
+        };
 
-        try {
-            // We fetch a larger batch and filter on the client for "contains" flexibility
-            let q = query(collection(db, "questions"), orderBy("createdAt", "desc"), limit(1000));
-            const snapshot = await getDocs(q);
-            let results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as QuestionBankItem));
+        // Final Filtered List for Display
+        filtered = applyFilters(allQuestions, filters);
 
-            // Cumulative Filtering Logic (Case/Accent Insensitive)
-            if (filters.concurso) {
-                const normFilter = normalizeText(filters.concurso);
-                results = results.filter(q =>
-                    normalizeText(q.concurso || "").includes(normFilter)
-                );
-            }
-            if (filters.banca) {
-                const normFilter = normalizeText(filters.banca);
-                results = results.filter(q =>
-                    normalizeText(q.banca || "").includes(normFilter)
-                );
-            }
-            if (filters.cargo) {
-                const normFilter = normalizeText(filters.cargo);
-                results = results.filter(q =>
-                    normalizeText(q.cargo || "").includes(normFilter)
-                );
-            }
-            if (filters.nivel) {
-                const normFilter = normalizeText(filters.nivel);
-                results = results.filter(q =>
-                    normalizeText(q.nivel || "").includes(normFilter)
-                );
-            }
-            if (filters.disciplina) {
-                const normFilter = normalizeText(filters.disciplina);
-                results = results.filter(q =>
-                    normalizeText(q.disciplina || "").includes(normFilter)
-                );
-            }
-            if (filters.ano) {
-                results = results.filter(q => String(q.ano) === filters.ano);
-            }
-            if (filters.estado) {
-                const normFilter = normalizeText(filters.estado);
-                results = results.filter(q =>
-                    normalizeText(q.estado || "").includes(normFilter)
-                );
-            }
-            if (filters.municipio) {
-                const normFilter = normalizeText(filters.municipio);
-                results = results.filter(q =>
-                    normalizeText(q.municipio || "").includes(normFilter)
-                );
-            }
-            if (filters.tipoQuestao) {
-                results = results.filter(q => q.tipoQuestao === filters.tipoQuestao);
+        // Natural Language Pattern Detection
+        if (searchQuery.trim()) {
+            const lowerQuery = searchQuery.toLowerCase().trim();
+
+            // Detect patterns like "questões de [disciplina]" or "questoes de [disciplina]"
+            const disciplinePatterns = [
+                { pattern: /quest[õo]es\s+de\s+(portugu[êe]s|l[íi]ngua\s+portuguesa)/i, discipline: "Língua Portuguesa" },
+                { pattern: /quest[õo]es\s+de\s+matem[áa]tica/i, discipline: "Matemática" },
+                { pattern: /quest[õo]es\s+de\s+(racioc[íi]nio\s+l[óo]gico|l[óo]gica)/i, discipline: "Raciocínio Lógico-Matemático" },
+                { pattern: /quest[õo]es\s+de\s+inform[áa]tica/i, discipline: "Informática" },
+                { pattern: /quest[õo]es\s+de\s+(direito\s+)?constitucional/i, discipline: "Direito Constitucional" },
+                { pattern: /quest[õo]es\s+de\s+(direito\s+)?administrativo/i, discipline: "Direito Administrativo" },
+                { pattern: /quest[õo]es\s+de\s+(direito\s+)?penal/i, discipline: "Direito Penal" },
+                { pattern: /quest[õo]es\s+de\s+(direito\s+)?civil/i, discipline: "Direito Civil" },
+                { pattern: /quest[õo]es\s+de\s+[ée]tica/i, discipline: "Ética no Serviço Público" },
+                { pattern: /quest[õo]es\s+de\s+atualidades/i, discipline: "Atualidades" },
+                { pattern: /quest[õo]es\s+de\s+geografia/i, discipline: "Geografia" },
+                { pattern: /quest[õo]es\s+de\s+hist[óo]ria/i, discipline: "História" },
+                { pattern: /quest[õo]es\s+de\s+(ingl[êe]s|l[íi]ngua\s+inglesa)/i, discipline: "Língua Inglesa" },
+            ];
+
+            // Check if query matches any discipline pattern
+            let detectedDiscipline = "";
+            for (const { pattern, discipline } of disciplinePatterns) {
+                if (pattern.test(lowerQuery)) {
+                    detectedDiscipline = discipline;
+                    break;
+                }
             }
 
-            // Global Text Search (Case/Accent Insensitive Tokens)
-            if (searchQuery.trim()) {
+            // If a discipline was detected, apply it as a filter
+            if (detectedDiscipline) {
+                filtered = filtered.filter(q =>
+                    normalizeText(q.disciplina || "").includes(normalizeText(detectedDiscipline))
+                );
+            } else {
+                // Standard search query (Tokens) - only if no discipline pattern detected
                 const tokens = normalizeText(searchQuery).split(/\s+/).filter(Boolean);
-
-                results = results.filter(q => {
+                filtered = filtered.filter(q => {
                     const searchableText = normalizeText([
                         q.text,
                         q.disciplina,
@@ -240,24 +238,56 @@ export default function QuestionBankPage() {
                         q.examTitle,
                         ...(q.options || [])
                     ].filter(Boolean).join(" "));
-
                     return tokens.every(token => searchableText.includes(token));
                 });
             }
-
-            setQuestions(results);
-        } catch (e) {
-            console.error("Error fetching questions:", e);
-        } finally {
-            setLoading(false);
         }
-    }, [user, filters, searchQuery]);
 
-    // Fetch and filter questions when filters or search change
-    useEffect(() => {
-        fetchAndFilterQuestions();
+        setQuestions(filtered);
+
+        // 3. Recalculate Facets (Dynamic Options)
+        const getUniqueOptions = (key: keyof QuestionBankItem, skipKey: keyof FilterState) => {
+            // To be truly "smart", when picking options for "Banca", we should consider filters applied to OTHER fields
+            // but NOT the "Banca" field itself, so you can still see/pick other Bancas.
+            const availableItems = applyFilters(allQuestions, filters, skipKey);
+            const set = new Set<string>();
+            availableItems.forEach(item => {
+                const val = (item as any)[key];
+                if (val) set.add(String(val));
+            });
+
+            // Unify display labels
+            const map = new Map<string, string>();
+            Array.from(set).forEach(val => {
+                const norm = normalizeText(val);
+                if (!map.has(norm)) map.set(norm, val);
+            });
+            return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+        };
+
+        setDynamicOptions(prev => ({
+            ...prev,
+            concursos: getUniqueOptions('concurso', 'concurso'),
+            bancas: getUniqueOptions('banca', 'banca'),
+            cargos: getUniqueOptions('cargo', 'cargo'),
+            niveis: getUniqueOptions('nivel', 'nivel'),
+            disciplinas: getUniqueOptions('disciplina', 'disciplina'),
+            anos: getUniqueOptions('ano' as any, 'ano').sort((a, b) => Number(b) - Number(a)),
+            estados: getUniqueOptions('estado' as any, 'estado'),
+            municipios: getUniqueOptions('municipio' as any, 'municipio'),
+            tipos: (() => {
+                const availableItems = applyFilters(allQuestions, filters, 'tipoQuestao');
+                const types = new Set<string>();
+                availableItems.forEach(q => q.tipoQuestao && types.add(q.tipoQuestao));
+                const res = [];
+                if (types.has('multipla_escolha')) res.push({ label: "Múltipla Escolha", value: "multipla_escolha" });
+                if (types.has('certo_errado')) res.push({ label: "Certo ou Errado", value: "certo_errado" });
+                return res;
+            })(),
+        }));
+
         setVisibleCount(20);
-    }, [fetchAndFilterQuestions]);
+    }, [allQuestions, filters, searchQuery]);
 
     // Infinite Scroll Logic
     useEffect(() => {
@@ -340,33 +370,39 @@ export default function QuestionBankPage() {
         options: (string | { label: string, value: string })[];
         onChange: (val: string) => void;
         placeholder: string;
-    }) => (
-        <div className="flex flex-col gap-1.5 min-w-[180px]">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
-                {label}
-            </label>
-            <div className="relative group">
-                <select
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    className={clsx(
-                        "w-full appearance-none px-4 py-2.5 bg-white dark:bg-slate-800 border rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-500/20",
-                        value
-                            ? "border-violet-300 dark:border-violet-700 text-slate-900 dark:text-white font-medium shadow-sm"
-                            : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600"
-                    )}
-                >
-                    <option value="">{placeholder}</option>
-                    {options.map((opt, i) => {
-                        const labelValue = typeof opt === 'string' ? opt : opt.label;
-                        const dataValue = typeof opt === 'string' ? opt : opt.value;
-                        return <option key={i} value={dataValue}>{labelValue}</option>
-                    })}
-                </select>
-                <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none group-hover:text-slate-500 transition-colors" />
+    }) => {
+        // Hide filter if there are no options available AND it's not currently active (selected)
+        // We want to keep active filters visible so they can be cleared.
+        if (options.length === 0 && !value) return null;
+
+        return (
+            <div className="flex flex-col gap-1.5 min-w-[180px] animate-in fade-in zoom-in duration-300">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
+                    {label}
+                </label>
+                <div className="relative group">
+                    <select
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                        className={clsx(
+                            "w-full appearance-none px-4 py-2.5 bg-white dark:bg-slate-800 border rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-500/20",
+                            value
+                                ? "border-violet-300 dark:border-violet-700 text-slate-900 dark:text-white font-medium shadow-sm"
+                                : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600"
+                        )}
+                    >
+                        <option value="">{placeholder}</option>
+                        {options.map((opt, i) => {
+                            const labelValue = typeof opt === 'string' ? opt : opt.label;
+                            const dataValue = typeof opt === 'string' ? opt : opt.value;
+                            return <option key={i} value={dataValue}>{labelValue}</option>
+                        })}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-slate-400 pointer-events-none group-hover:text-slate-500 transition-colors" />
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
@@ -428,7 +464,7 @@ export default function QuestionBankPage() {
                                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 md:py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs md:text-sm font-black transition shadow-lg shadow-violet-500/25 active:scale-95 whitespace-nowrap"
                             >
                                 <Play className="w-3 h-3 md:w-4 md:h-4 shrink-0" />
-                                <span className="uppercase tracking-wide">RESOLVER</span>
+                                <span className="uppercase tracking-wide">Iniciar Quiz</span>
                             </button>
                         )}
                     </div>
@@ -566,8 +602,9 @@ export default function QuestionBankPage() {
                             >
                                 <div className="flex flex-wrap items-center gap-3 mb-5">
                                     <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-violet-600 text-white rounded-lg shadow-md shadow-violet-500/20">
-                                        Questão {idx + 1}
+                                        {idx + 1}
                                     </span>
+
                                     {question.isVerified === false && (
                                         <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white rounded-lg shadow-md shadow-amber-500/20 flex items-center gap-1">
                                             <AlertTriangle className="w-3 h-3" />
@@ -579,6 +616,7 @@ export default function QuestionBankPage() {
                                             {question.banca}
                                         </span>
                                     )}
+
                                     {question.ano && (
                                         <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                                             {question.ano}
@@ -588,6 +626,27 @@ export default function QuestionBankPage() {
                                     <span className="text-xs font-bold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/10 px-2 py-1 rounded-md">
                                         {question.disciplina}
                                     </span>
+                                    {/* Answer Status Badge */}
+                                    {questionAttempts.has(question.id) && (
+                                        <span className={clsx(
+                                            "px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm flex items-center gap-1.5 border",
+                                            questionAttempts.get(question.id)?.isCorrect
+                                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+                                                : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                                        )}>
+                                            {questionAttempts.get(question.id)?.isCorrect ? (
+                                                <>
+                                                    <CheckCircle className="w-3 h-3" />
+                                                    Respondida Corretamente
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <XCircle className="w-3 h-3" />
+                                                    Respondida Incorretamente
+                                                </>
+                                            )}
+                                        </span>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-6">
@@ -635,6 +694,19 @@ export default function QuestionBankPage() {
                                                     {question.createdByDisplayName || "Anônimo"}
                                                 </span>
                                             </div>
+
+                                            {/* Comments Button */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveQuestionIdForComments(question.id);
+                                                }}
+                                                className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 hover:text-violet-500 dark:hover:text-violet-400 uppercase tracking-tight transition-colors group/comments"
+                                            >
+                                                <MessageSquare className="w-3 h-3 group-hover/comments:scale-110 transition-transform" />
+                                                Comentários
+                                            </button>
+
                                         </div>
                                     </div>
 
@@ -659,6 +731,29 @@ export default function QuestionBankPage() {
                     </div>
                 )}
             </main>
+
+            {/* Comments Modal */}
+            {activeQuestionIdForComments && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+                    onClick={() => setActiveQuestionIdForComments(null)}
+                >
+                    <div
+                        className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg h-[600px] max-h-[90vh] overflow-hidden relative animate-in zoom-in-95 duration-200 ring-1 ring-white/10"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => setActiveQuestionIdForComments(null)}
+                            className="absolute right-4 top-4 p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 z-10 bg-white/5 data-[hover]:bg-white/10 rounded-full transition-colors"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                        <div className="h-full pt-2">
+                            <CommentsSection questionId={activeQuestionIdForComments} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
