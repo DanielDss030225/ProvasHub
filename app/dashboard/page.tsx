@@ -7,7 +7,7 @@ import { auth, db, storage } from "../../lib/firebase";
 import { updateProfile, signOut } from "firebase/auth";
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDoc, arrayUnion, arrayRemove, increment, doc, onSnapshot, runTransaction, getDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 
 import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -16,6 +16,33 @@ import { ImageCropper } from "../components/ImageCropper";
 import { getImageDimensions } from "../../lib/imageUtils";
 import { useAlert } from "../context/AlertContext";
 import clsx from "clsx";
+
+// Animation Variants defined outside component for better performance and type stability
+const containerVariants: any = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1,
+            delayChildren: 0.1
+        }
+    }
+};
+
+const itemVariants: any = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const } }
+};
+
+const headerVariants: any = {
+    hidden: { opacity: 0, y: -20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const } }
+};
+
+const sidebarVariants: any = {
+    hidden: { opacity: 0, x: 20 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const } }
+};
 
 export default function Dashboard() {
     const { user, loading } = useAuth();
@@ -643,32 +670,7 @@ export default function Dashboard() {
 
 
 
-    // Animation Variants
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1,
-                delayChildren: 0.1
-            }
-        }
-    };
 
-    const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
-    };
-
-    const headerVariants = {
-        hidden: { opacity: 0, y: -20 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
-    };
-
-    const sidebarVariants = {
-        hidden: { opacity: 0, x: 20 },
-        visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
-    };
 
     if (loading || !user) return null;
 
@@ -945,7 +947,7 @@ export default function Dashboard() {
 
             {/* Fixed Header */}
             <motion.div
-                variants={headerVariants}
+                variants={headerVariants as any}
                 className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] shadow-sm transition-colors"
             >
                 <div className="max-w-6xl mx-auto px-4 md:px-8 h-full">
@@ -1125,7 +1127,7 @@ export default function Dashboard() {
             </motion.div>
 
             <motion.div
-                variants={containerVariants}
+                variants={containerVariants as any}
                 className="max-w-6xl mx-auto space-y-8 pt-4 lg:pt-16 lg:h-full lg:overflow-hidden px-4 md:px-8"
             >
                 {/* Responsive Layout: Flex Column Reverse on Mobile (Right on Top), Flex Row on Desktop */}
@@ -1133,7 +1135,7 @@ export default function Dashboard() {
 
                     {/* Main Content (Left on Desktop, Bottom on Mobile) */}
                     <motion.div
-                        variants={itemVariants}
+                        variants={itemVariants as any}
                         className="flex-1 w-full min-w-0 space-y-8 h-auto lg:h-full lg:overflow-y-auto pb-24 lg:pb-32 custom-scrollbar lg:pt-[15px]"
                         style={{
                             WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
@@ -1142,7 +1144,7 @@ export default function Dashboard() {
                     >
                         {/* Upload Section */}
                         {/* Upload Button Section */}
-                        <motion.div variants={itemVariants} className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors text-center">
+                        <motion.div variants={itemVariants as any} className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors text-center">
                             <div className="max-w-xl mx-auto">
                                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">
                                     Enviar nova Prova ou Simulado
@@ -1163,7 +1165,7 @@ export default function Dashboard() {
                         </motion.div>
 
                         {/* Resolver Questões Cards Grid */}
-                        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+                        <motion.div variants={itemVariants as any} className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
                             {/* Card 1: List View */}
                             <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
                                 onClick={() => router.push('/dashboard/questions-list')}
@@ -1206,7 +1208,7 @@ export default function Dashboard() {
                         </motion.div>
 
                         {/* Recent Exams List */}
-                        <motion.div variants={itemVariants}>
+                        <motion.div variants={itemVariants as any}>
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold text-slate-800 dark:text-white">Provas Recentes</h2>
                                 <button
@@ -1365,7 +1367,7 @@ export default function Dashboard() {
 
                     {/* Right Sidebar: Exam Requests (Right on Desktop, Top on Mobile) */}
                     <motion.div
-                        variants={sidebarVariants}
+                        variants={sidebarVariants as any}
                         className="w-full lg:w-[300px] shrink-0 h-auto lg:h-full lg:overflow-y-auto lg:pb-32 pb-4 mt-6 lg:mt-0 custom-scrollbar lg:pt-[15px]"
                         style={{
                             WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
