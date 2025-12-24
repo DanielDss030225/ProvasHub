@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { db, storage } from "../../../../lib/firebase";
 import { doc, getDoc, updateDoc, runTransaction, increment, collection, setDoc, Timestamp, arrayUnion, onSnapshot } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { Loader2, Save, ArrowLeft, AlertTriangle, FileText, Image as ImageIcon, Upload, CheckCircle, XCircle, Trash2, ExternalLink, Plus, Book, Zap, ChevronDown, Search, Menu, X, Home, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, ArrowLeft, AlertTriangle, FileText, Image as ImageIcon, Upload, CheckCircle, XCircle, Trash2, ExternalLink, Plus, Book, Zap, ChevronDown, Search, Menu, X, Home, Eye, EyeOff, Check } from "lucide-react";
 import { FormattedText } from "../../../components/FormattedText";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
@@ -423,14 +423,27 @@ export default function ReviewPage({ params }: PageProps) {
         setLoadingCities(prev => ({ ...prev, [stateCode]: true }));
         try {
             const response = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${stateCode}/municipios`);
+
+            if (!response.ok) {
+                console.warn(`IBGE API returned ${response.status} for ${stateCode}. Skipping city fetch.`);
+                return;
+            }
+
             const data = await response.json();
+
+            if (!Array.isArray(data)) {
+                console.warn("IBGE returned non-array data:", data);
+                return;
+            }
+
             const sortedCities = data
                 .map((city: any) => ({ value: city.nome, label: city.nome }))
                 .sort((a: any, b: any) => a.label.localeCompare(b.label));
 
             setCitiesCache(prev => ({ ...prev, [stateCode]: sortedCities }));
         } catch (error) {
-            console.error("Error fetching cities:", error);
+            // Silently handle network errors to avoid crashing the UI
+            console.warn("Network error while fetching cities from IBGE:", error);
         } finally {
             setLoadingCities(prev => ({ ...prev, [stateCode]: false }));
         }
@@ -939,20 +952,11 @@ export default function ReviewPage({ params }: PageProps) {
     const handleUpdate = async () => {
         if (!exam) return;
 
-        // Improved Answer Key Detection: Check percentage of questions with correct answers
         const questions = [...exam.extractedData.questions];
-        const questionsWithAnswers = questions.filter(q => q.correctAnswer && q.correctAnswer.trim().length > 0).length;
-        const answerPercentage = questions.length > 0 ? (questionsWithAnswers / questions.length) : 0;
-
-        // Consider the exam has a valid answer key if:
-        // 1. Has answerKeyResult from import OR
-        // 2. At least 40% of questions have correctAnswer filled
-        const hasKey = !!(exam.extractedData.answerKeyResult || answerKeyResult) || answerPercentage >= 0.4;
+        const hasKey = !!(exam.extractedData.answerKeyResult || answerKeyResult);
 
         console.log("=== ANSWER KEY DETECTION ===");
         console.log("Total Questions:", questions.length);
-        console.log("Questions with Answers:", questionsWithAnswers);
-        console.log("Answer Percentage:", (answerPercentage * 100).toFixed(1) + "%");
         console.log("Has AnswerKeyResult:", !!(exam.extractedData.answerKeyResult || answerKeyResult));
         console.log("Final hasKey:", hasKey);
 
@@ -1360,12 +1364,26 @@ export default function ReviewPage({ params }: PageProps) {
                             <Upload className="w-5 h-5 text-violet-500" />
                             <h2 className="font-bold uppercase text-xs tracking-widest">Importar Gabarito</h2>
                         </div>
-                        {!answerKeyResult && !parsingAnswerKey && (
-                            <div className="flex items-center gap-2 p-2 px-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-tighter animate-pulse">
-                                <AlertTriangle className="w-3 h-3" />
-                                Gabarito Pendente
-                            </div>
-                        )}
+                        {(() => {
+                            const hasKeyUI = !!(exam.extractedData.answerKeyResult || answerKeyResult);
+
+                            if (!hasKeyUI && !parsingAnswerKey) {
+                                return (
+                                    <div className="flex items-center gap-2 p-2 px-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-tighter animate-pulse">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        Gabarito Pendente
+                                    </div>
+                                );
+                            } else if (hasKeyUI && !parsingAnswerKey) {
+                                return (
+                                    <div className="flex items-center gap-2 p-2 px-3 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 rounded-xl text-[10px] font-black text-green-600 dark:text-green-500 uppercase tracking-tighter">
+                                        <Check className="w-3 h-3" />
+                                        Gabarito Identificado
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
                         <div
                             onClick={() => answerKeyInputRef.current?.click()}
                             className={clsx(

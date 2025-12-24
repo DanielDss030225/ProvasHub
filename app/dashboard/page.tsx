@@ -926,22 +926,30 @@ export default function Dashboard() {
                                                     className={clsx(
                                                         "px-2 py-0.5 rounded-full text-xs font-medium shrink-0",
                                                         (() => {
+                                                            const isReady = exam.status === 'ready';
                                                             const questions = exam.extractedData?.questions || [];
-                                                            const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
-                                                            const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
 
-                                                            if (exam.status !== 'ready') return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+                                                            let hasKey = false;
+                                                            if (exam.creditsAwarded === true) hasKey = true;
+                                                            else if (exam.creditsAwarded === false) hasKey = false;
+                                                            else hasKey = !!exam.extractedData?.answerKeyResult;
+
+                                                            if (!isReady) return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
                                                             return !hasKey
-                                                                ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                                                                : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400";
+                                                                ? "bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400"
+                                                                : "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400";
                                                         })()
                                                     )}>
                                                     {(() => {
+                                                        const isReady = exam.status === 'ready';
                                                         const questions = exam.extractedData?.questions || [];
-                                                        const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
-                                                        const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
 
-                                                        if (exam.status !== 'ready') return 'Revisão';
+                                                        let hasKey = false;
+                                                        if (exam.creditsAwarded === true) hasKey = true;
+                                                        else if (exam.creditsAwarded === false) hasKey = false;
+                                                        else hasKey = !!exam.extractedData?.answerKeyResult;
+
+                                                        if (!isReady) return 'Revisão';
                                                         return !hasKey ? 'Pendente de Gabarito' : 'Pronta';
                                                     })()}
                                                 </span>
@@ -1263,8 +1271,12 @@ export default function Dashboard() {
                                                     {(() => {
                                                         const isReady = exam.status === 'ready';
                                                         const questions = exam.extractedData?.questions || [];
-                                                        const answered = questions.filter((q: any) => q.correctAnswer && String(q.correctAnswer).trim().length > 0).length;
-                                                        const hasKey = exam.creditsAwarded ?? (questions.length > 0 && (answered / questions.length) >= 0.4);
+
+                                                        let hasKey = false;
+                                                        if (exam.creditsAwarded === true) hasKey = true;
+                                                        else if (exam.creditsAwarded === false) hasKey = false;
+                                                        else hasKey = !!exam.extractedData?.answerKeyResult;
+
                                                         const isPendingKey = isReady && !hasKey;
 
                                                         let statusLabel = "Em Revisão";
