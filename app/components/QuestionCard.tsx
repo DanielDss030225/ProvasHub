@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, MessageSquare, Share2, CheckCircle, XCircle, ArrowRight, User } from "lucide-react";
+import { BookOpen, MessageSquare, Share2, CheckCircle, XCircle, ArrowRight, User, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
 import { FormattedText } from "./FormattedText";
 import { CommentsSection } from "./CommentsSection";
@@ -24,6 +24,7 @@ interface QuestionCardProps {
         questionIndex?: number;
         createdByDisplayName?: string;
         createdByPhotoURL?: string;
+        isVerified?: boolean;
     };
     userAnswer?: string;
     isAnswered: boolean;
@@ -71,10 +72,12 @@ export function QuestionCard({
                         <span className="text-lg font-bold text-slate-700 dark:text-slate-200">
                             Questão {question.questionIndex !== undefined ? question.questionIndex + 1 : "?"}
                         </span>
-                        <span className="text-xs font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                            ID: {question.id}
-                        </span>
-
+                        {question.isVerified === false && (
+                            <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white rounded-lg shadow-md shadow-amber-500/20 flex items-center gap-1 animate-pulse">
+                                <AlertTriangle className="w-3 h-3" />
+                                Pendente de Gabarito
+                            </span>
+                        )}
                     </div>
                 </div>
 

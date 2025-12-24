@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db } from "../../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit, doc, runTransaction } from "firebase/firestore";
-import { Loader2, ArrowLeft, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, Coins, BookOpen, Trophy, MessageSquare, Share2 } from "lucide-react";
+import { Loader2, ArrowLeft, CheckCircle, XCircle, ChevronLeft, ChevronRight, Clock, Coins, BookOpen, Trophy, MessageSquare, Share2, AlertTriangle } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 import { FormattedText } from "../../../components/FormattedText";
@@ -31,6 +31,7 @@ interface QuestionBankItem {
     estado?: string;
     municipio?: string;
     tipoQuestao: 'multipla_escolha' | 'certo_errado';
+    isVerified?: boolean;
 }
 
 const normalizeText = (text: string) => {
@@ -643,6 +644,12 @@ function QuestionSolveContent() {
                                 {currentQuestion.banca && (
                                     <span className="px-3 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
                                         {currentQuestion.banca}
+                                    </span>
+                                )}
+                                {currentQuestion.isVerified === false && (
+                                    <span className="px-3 py-1 text-[10px] font-black uppercase tracking-wider bg-amber-500 text-white rounded-full shadow-md shadow-amber-500/20 flex items-center gap-1 animate-pulse">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        Pendente de Gabarito
                                     </span>
                                 )}
                                 {/* Answer Status Badge */}
