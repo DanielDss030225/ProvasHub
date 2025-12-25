@@ -966,7 +966,7 @@ export default function Dashboard() {
             {/* Fixed Header */}
             <motion.div
                 variants={headerVariants as any}
-                className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] transition-colors"
+                className="fixed top-0 left-0 w-full h-12 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-[60] transition-colors"
             >
                 <div className="max-w-6xl mx-auto px-4 md:px-8 h-full">
                     <div className="flex items-center justify-between h-full">
@@ -1146,7 +1146,7 @@ export default function Dashboard() {
 
             <motion.div
                 variants={containerVariants as any}
-                className="max-w-6xl mx-auto space-y-8 pt-4 lg:pt-16 lg:h-full lg:overflow-hidden px-4 md:px-8"
+                className="max-w-6xl mx-auto space-y-4 pt-[52px] lg:pt-[52px] lg:h-full lg:overflow-hidden px-4 md:px-8"
             >
                 {/* Responsive Layout: Flex Column Reverse on Mobile (Right on Top), Flex Row on Desktop */}
                 <div className="flex flex-col-reverse lg:flex-row gap-4 lg:gap-8 items-start lg:h-full">
@@ -1154,11 +1154,7 @@ export default function Dashboard() {
                     {/* Main Content (Left on Desktop, Bottom on Mobile) */}
                     <motion.div
                         variants={itemVariants as any}
-                        className="flex-1 w-full min-w-0 space-y-8 h-auto lg:h-full lg:overflow-y-auto pb-24 lg:pb-32 custom-scrollbar lg:pt-[15px]"
-                        style={{
-                            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
-                            maskImage: 'linear-gradient(to bottom, transparent, black 15px, black)'
-                        }}
+                        className="flex-1 w-full min-w-0 space-y-4 h-auto lg:h-full lg:overflow-y-auto pb-24 lg:pb-32 custom-scrollbar"
                     >
                         {/* Upload Section */}
                         {/* Upload Button Section */}
@@ -1392,11 +1388,7 @@ export default function Dashboard() {
                     {/* Right Sidebar: Exam Requests (Right on Desktop, Top on Mobile) */}
                     <motion.div
                         variants={sidebarVariants as any}
-                        className="w-full lg:w-[300px] shrink-0 h-auto lg:h-full lg:overflow-y-auto lg:pb-32 pb-4 mt-6 lg:mt-0 custom-scrollbar lg:pt-[15px]"
-                        style={{
-                            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15px, black)',
-                            maskImage: 'linear-gradient(to bottom, transparent, black 15px, black)'
-                        }}
+                        className="w-full lg:w-[300px] shrink-0 h-auto lg:h-full lg:overflow-y-auto lg:pb-32 pb-4 mt-3 lg:mt-0 custom-scrollbar"
                     >
 
                         <div className="">
