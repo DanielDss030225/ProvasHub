@@ -742,6 +742,49 @@ export default function Dashboard() {
 
 
 
+    // Stripe Confetti Animation
+    useEffect(() => {
+        const queryParams = new URLSearchParams(window.location.search);
+        if (queryParams.get('purchase') === 'success') {
+            setIsCheckoutModalOpen(false);
+
+            // Trigger Confetti
+            import('canvas-confetti').then((confetti) => {
+                const duration = 3000;
+                const end = Date.now() + duration;
+
+                const frame = () => {
+                    confetti.default({
+                        particleCount: 5,
+                        angle: 60,
+                        spread: 55,
+                        origin: { x: 0 },
+                        colors: ['#7c3aed', '#fbbf24', '#10b981']
+                    });
+                    confetti.default({
+                        particleCount: 5,
+                        angle: 120,
+                        spread: 55,
+                        origin: { x: 1 },
+                        colors: ['#7c3aed', '#fbbf24', '#10b981']
+                    });
+
+                    if (Date.now() < end) {
+                        requestAnimationFrame(frame);
+                    }
+                };
+                frame();
+            });
+
+            showAlert("Pagamento confirmado! Seus credits foram adicionados.", "success", "Sucesso!");
+
+            // Clean URL
+            const url = new URL(window.location.href);
+            url.searchParams.delete('purchase');
+            window.history.replaceState({}, '', url.toString());
+        }
+    }, []);
+
     const executeSolveExam = async (examOverride?: any) => {
         if (!examOverride && !confirmingSolveExam) return;
         if (!user) return;

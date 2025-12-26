@@ -53,6 +53,20 @@ export async function POST(req: Request) {
                             totalPurchased: increment(coins),
                             lastPurchaseAt: new Date()
                         });
+
+                        // Create notification
+                        const notificationRef = doc(db, "users", userId, "notifications", `pay_${session.id}`);
+                        transaction.set(notificationRef, {
+                            type: 'payment_success',
+                            title: 'Pagamento Confirmado!',
+                            message: `Parabéns! Você recebeu ${coins} coins.`,
+                            read: false,
+                            createdAt: new Date(),
+                            metadata: {
+                                amount: coins,
+                                sessionId: session.id
+                            }
+                        });
                     }
                 });
                 console.log(`Successfully added ${coins} credits to user ${userId}`);
