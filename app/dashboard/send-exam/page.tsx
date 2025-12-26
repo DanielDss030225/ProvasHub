@@ -337,7 +337,6 @@ function SendExamContent() {
 
         const startTime = Date.now();
         setTimeLeft(170);
-        setProgress(5);
         setUploadStatus("Lendo arquivo...");
         addLog(`Lendo arquivo: ${file.name}...`);
 
@@ -359,7 +358,6 @@ function SendExamContent() {
             // 1. Read file
             const base64String = await readFileAsBase64(file);
             addLog("Arquivo lido.");
-            setProgress(10);
 
             // 2. Process Entire Exam
             setUploadStatus("Processando... (Isso pode demorar alguns minutos)");
