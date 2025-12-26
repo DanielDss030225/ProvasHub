@@ -979,7 +979,7 @@ export default function Dashboard() {
             {/* Credits Info Modal */}
             {isCreditsModalOpen && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsCreditsModalOpen(false)}>
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-5 sm:p-6 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto scrollbar-hide" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-start mb-4">
                             <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                 <Coins className="w-6 h-6 text-amber-500" />
@@ -989,6 +989,7 @@ export default function Dashboard() {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
+                        {/* ... content ... */}
 
                         <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl flex items-center justify-between mb-6 border border-amber-100 dark:border-amber-800">
                             <div>
@@ -1259,8 +1260,8 @@ export default function Dashboard() {
             {/* Checkout Modal Simulation */}
             {isCheckoutModalOpen && selectedPackage && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200" onClick={() => !isPurchasing && setIsCheckoutModalOpen(false)}>
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[32px] shadow-2xl p-8 relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-8">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[24px] sm:rounded-[32px] shadow-2xl p-6 sm:p-8 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto scrollbar-hide" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6 sm:mb-8">
                             <h3 className="text-2xl font-black text-slate-800 dark:text-white">Pagamento</h3>
                             <button onClick={() => !isPurchasing && setIsCheckoutModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                                 <X className="w-6 h-6" />
