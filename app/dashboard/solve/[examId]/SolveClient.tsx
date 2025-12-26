@@ -200,6 +200,7 @@ export default function SolveClient({ examId }: SolveClientProps) {
             );
         } else {
             setCurrentIndex(prev => prev + 1);
+            setShowComments(false); // Hide comments when moving to next question
             scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -732,6 +733,7 @@ export default function SolveClient({ examId }: SolveClientProps) {
                             <button
                                 onClick={() => {
                                     setCurrentIndex(prev => Math.max(0, prev - 1));
+                                    setShowComments(false); // Hide comments when moving back
                                     scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
                                 disabled={currentIndex === 0}

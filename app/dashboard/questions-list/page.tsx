@@ -406,20 +406,9 @@ export default function QuestionsListPage() {
 
     const handleAnswer = async (questionId: string, optionLetter: string, e: React.MouseEvent<HTMLButtonElement>) => {
         // Capture position for animation synchronously BEFORE ANY async operations
-        // Find the closest card container (using '.group' class which is on the main card div)
-        const card = e.currentTarget.closest('.group');
-        let startX, startY;
-
-        if (card) {
-            const rect = card.getBoundingClientRect();
-            startX = rect.left + rect.width / 2;
-            startY = rect.top + rect.height / 2;
-        } else {
-            // Fallback to button center
-            const rect = e.currentTarget.getBoundingClientRect();
-            startX = rect.left + rect.width / 2;
-            startY = rect.top + rect.height / 2;
-        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const startX = rect.left + rect.width / 2;
+        const startY = rect.top + rect.height / 2;
 
         if (!user) {
             await signInWithGoogle();
@@ -432,6 +421,15 @@ export default function QuestionsListPage() {
         if (!question) return;
 
         const isCorrect = optionLetter.toLowerCase() === (question.correctAnswer?.toLowerCase() || '');
+
+        // Trigger coin animation immediately if correct and not already answered for instant feedback
+        if (isCorrect && !answeredQuestions.has(questionId)) {
+            const newCoin = { id: Date.now(), startX, startY, delay: 0 };
+            setFlyingCoins(prev => [...prev, newCoin]);
+            playSound('collect');
+            // Set as answered immediately to prevent duplicate animations
+            setAnsweredQuestions(prev => new Set(prev).add(questionId));
+        }
 
         setAnswers(prev => ({ ...prev, [questionId]: optionLetter }));
         setResults(prev => ({ ...prev, [questionId]: isCorrect }));
@@ -448,7 +446,8 @@ export default function QuestionsListPage() {
                 }, { merge: true });
             });
 
-            if (isCorrect && !answeredQuestions.has(questionId)) {
+            if (isCorrect) {
+                // The answeredQuestions check and set were moved above for immediate feedback
                 await runTransaction(db, async (transaction) => {
                     const userRef = doc(db, "users", user.uid);
                     const userDoc = await transaction.get(userRef);
@@ -457,13 +456,6 @@ export default function QuestionsListPage() {
                     transaction.update(userRef, { credits: newCredits });
                     setUserCredits(newCredits);
                 });
-
-                setAnsweredQuestions(prev => new Set(prev).add(questionId));
-
-                // Trigger coin animation using pre-captured coordinates
-                const newCoin = { id: Date.now(), startX, startY, delay: 0 };
-                setFlyingCoins(prev => [...prev, newCoin]);
-                playSound('collect');
             }
         } catch (error) {
             console.error("Error saving answer:", error);
@@ -512,9 +504,9 @@ export default function QuestionsListPage() {
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                     <div className="flex flex-col min-w-0 max-w-[200px] md:max-w-md">
-                        Banco de Questões
+                        <h1 className="text-lg md:text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 truncate"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-book-open w-5 h-5 md:w-6 md:h-6 text-violet-500 shrink-0" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg><span className="truncate">Resolver Questões</span></h1>
                         <span className="text-[10px] md:text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {questions.length} de {allQuestions.length} questões disponíveis • {Object.keys(results).length} respondidas
+                            {questions.length} de {allQuestions.length} questões disponíveis • {Object.keys(results).length} respondidas agora
                         </span>
                     </div>
                 </div>

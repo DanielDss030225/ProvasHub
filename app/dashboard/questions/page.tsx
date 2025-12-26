@@ -419,7 +419,7 @@ export default function QuestionBankPage() {
                         <div className="min-w-0">
                             <h1 className="text-lg md:text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 truncate">
                                 <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-violet-500 shrink-0" />
-                                <span className="truncate">Banco de Questões</span>
+                                <span className="truncate">Modalidade Quiz</span>
                             </h1>
                             <p className="text-[10px] md:text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
                                 {visibleCount < questions.length ? (

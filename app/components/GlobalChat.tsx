@@ -3,9 +3,9 @@
 import { useAuth } from "../../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
 import { db } from "../../lib/firebase";
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle, X, Send } from "lucide-react";
+import { MessageCircle, X, Send, Edit2, Trash2, Check } from "lucide-react";
 import clsx from "clsx";
 
 interface Message {
@@ -15,6 +15,8 @@ interface Message {
     userPhoto?: string;
     message: string;
     timestamp: any;
+    edited?: boolean;
+    editedAt?: any;
 }
 
 export function GlobalChat() {
@@ -24,6 +26,9 @@ export function GlobalChat() {
     const [newMessage, setNewMessage] = useState("");
     const [sending, setSending] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+    const [editText, setEditText] = useState("");
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const lastReadCountRef = useRef(0);
@@ -101,6 +106,12 @@ export function GlobalChat() {
     const handleSend = async () => {
         if (!newMessage.trim() || !user || sending) return;
 
+        // If editing, save edit instead
+        if (editingMessageId) {
+            handleSaveEdit();
+            return;
+        }
+
         setSending(true);
         try {
             await addDoc(collection(db, "globalChat"), {
@@ -123,6 +134,54 @@ export function GlobalChat() {
             e.preventDefault();
             handleSend();
         }
+    };
+
+    const handleEdit = (msg: Message) => {
+        setEditingMessageId(msg.id);
+        setNewMessage(msg.message);
+        inputRef.current?.focus();
+    };
+
+    const handleSaveEdit = async () => {
+        if (!newMessage.trim() || !user || !editingMessageId) return;
+
+        try {
+            const messageRef = doc(db, "globalChat", editingMessageId);
+            await updateDoc(messageRef, {
+                message: newMessage.trim(),
+                edited: true,
+                editedAt: serverTimestamp()
+            });
+            setEditingMessageId(null);
+            setNewMessage("");
+        } catch (error) {
+            console.error("Error editing message:", error);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingMessageId(null);
+        setNewMessage("");
+    };
+
+    const handleDelete = async (messageId: string) => {
+        if (!user) return;
+        setDeleteConfirmId(messageId);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteConfirmId) return;
+
+        try {
+            await deleteDoc(doc(db, "globalChat", deleteConfirmId));
+            setDeleteConfirmId(null);
+        } catch (error) {
+            console.error("Error deleting message:", error);
+        }
+    };
+
+    const cancelDelete = () => {
+        setDeleteConfirmId(null);
     };
 
 
@@ -186,8 +245,9 @@ export function GlobalChat() {
                                                 user && msg.userId === user.uid && "items-end"
                                             )}
                                         >
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 mb-0.5">
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 mb-0.5 flex items-center gap-1">
                                                 {msg.userName}
+                                                {msg.edited && <span className="text-[9px] italic">(editada)</span>}
                                             </span>
                                             <div
                                                 className={clsx(
@@ -198,7 +258,27 @@ export function GlobalChat() {
                                                 )}
                                                 style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                                             >
-                                                {renderMessageWithLinks(msg.message)}
+                                                <div className="flex items-start gap-2 justify-between">
+                                                    <span className="flex-1">{renderMessageWithLinks(msg.message)}</span>
+                                                    {user && msg.userId === user.uid && (
+                                                        <div className="flex gap-1 shrink-0">
+                                                            <button
+                                                                onClick={() => handleEdit(msg)}
+                                                                className="p-1 hover:bg-white/20 dark:hover:bg-slate-700/50 rounded transition"
+                                                                title="Editar"
+                                                            >
+                                                                <Edit2 className="w-3 h-3" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(msg.id)}
+                                                                className="p-1 hover:bg-white/20 dark:hover:bg-slate-700/50 rounded transition"
+                                                                title="Excluir"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -209,6 +289,20 @@ export function GlobalChat() {
 
                         {/* Input or Login Prompt */}
                         <div className="p-3 border-t border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50">
+                            {editingMessageId && (
+                                <div className="mb-2 px-3 py-2 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-lg flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Edit2 className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                                        <span className="text-sm text-violet-700 dark:text-violet-300 font-medium">Editando mensagem</span>
+                                    </div>
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            )}
                             {user ? (
                                 <div className="flex gap-2">
                                     <input
@@ -226,7 +320,7 @@ export function GlobalChat() {
                                         disabled={!newMessage.trim() || sending}
                                         className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        <Send className="w-4 h-4" />
+                                        {editingMessageId ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                                     </button>
                                 </div>
                             ) : (
@@ -243,6 +337,54 @@ export function GlobalChat() {
                                 </div>
                             )}
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Delete Confirmation Modal */}
+            <AnimatePresence>
+                {deleteConfirmId && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]"
+                        onClick={cancelDelete}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-sm mx-4 border border-slate-200 dark:border-slate-700"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                                    <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">Excluir mensagem</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita</p>
+                                </div>
+                            </div>
+                            <p className="text-slate-700 dark:text-slate-300 mb-6">
+                                Tem certeza que deseja excluir esta mensagem? Ela será removida permanentemente do chat.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={cancelDelete}
+                                    className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
+                                >
+                                    Excluir
+                                </button>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
