@@ -8,7 +8,7 @@ const getStripe = () => {
         throw new Error('STRIPE_SECRET_KEY is not defined');
     }
     return new Stripe(process.env.STRIPE_SECRET_KEY, {
-        apiVersion: '2025-01-27-preview' as any,
+        apiVersion: '2024-06-20' as any,
     });
 };
 
