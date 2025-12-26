@@ -5,10 +5,11 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../lib/firebase";
 import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
-import { Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft, User, AlertTriangle, CheckCircle, XCircle, MessageSquare, Coins } from "lucide-react";
+import { Share2, Loader2, Filter, Search, BookOpen, ChevronDown, X, Play, ArrowLeft, User, AlertTriangle, CheckCircle, XCircle, MessageSquare, Coins } from "lucide-react";
 import { FormattedText } from "../../components/FormattedText";
 import { CommentsSection } from "../../components/CommentsSection";
 import { QuestionCard } from "../../components/QuestionCard";
+import { useAlert } from "../../context/AlertContext";
 import clsx from "clsx";
 
 interface QuestionBankItem {
@@ -72,6 +73,7 @@ const normalizeText = (text: string) => {
 export default function QuestionBankPage() {
     const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const router = useRouter();
+    const { showAlert } = useAlert();
     const [isSigningInToSolve, setIsSigningInToSolve] = useState(false);
 
     const [allQuestions, setAllQuestions] = useState<QuestionBankItem[]>([]);
@@ -369,6 +371,17 @@ export default function QuestionBankPage() {
         if (searchQuery) params.set('q', searchQuery);
         router.push(`/dashboard/questions/solve?${params.toString()}`);
     }, [user, questions, solveLimit, filters, searchQuery, router, signInWithGoogle]);
+
+    const handleShare = async (questionId: string) => {
+        const url = `${window.location.origin}/dashboard/questions/solve?id=${questionId}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showAlert("Link da questão copiado!", "success");
+        } catch (err) {
+            console.error("Failed to copy: ", err);
+            showAlert("Erro ao copiar o link.", "error");
+        }
+    };
 
     useEffect(() => {
         if (user && isSigningInToSolve) {
@@ -741,6 +754,17 @@ export default function QuestionBankPage() {
                                             >
                                                 <MessageSquare className="w-3 h-3 group-hover/comments:scale-110 transition-transform" />
                                                 Comentários
+                                            </button>
+
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleShare(question.id);
+                                                }}
+                                                className="flex items-center gap-1.5 border-l border-slate-200 dark:border-slate-800 pl-4 text-[10px] font-bold text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 uppercase tracking-tight transition-colors group/share"
+                                            >
+                                                <Share2 className="w-3 h-3 group-hover/share:scale-110 transition-transform" />
+                                                Compartilhar
                                             </button>
 
                                         </div>

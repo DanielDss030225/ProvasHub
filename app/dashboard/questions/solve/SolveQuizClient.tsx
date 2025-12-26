@@ -5,14 +5,14 @@ import { useRef, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { db } from "../../../../lib/firebase";
 import { doc, getDoc, runTransaction, setDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
-import { Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText, Coins, MessageSquare, X } from "lucide-react";
+import { Share2, Loader2, ArrowLeft, CheckCircle, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Eye, FileText, Coins, MessageSquare, X, Lock, User } from "lucide-react";
 import { useAlert } from "../../../context/AlertContext";
 import clsx from "clsx";
 import { FormattedText } from "../../../components/FormattedText";
 import { CommentsSection } from "../../../components/CommentsSection";
 
 export default function SolveQuizClient() {
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showAlert } = useAlert();
@@ -41,23 +41,48 @@ export default function SolveQuizClient() {
     const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(new Set());
     const [rewardAwarded, setRewardAwarded] = useState(false);
 
-    // Load Questions from sessionStorage
+    // Load Questions from sessionStorage or search params (for shared links)
     useEffect(() => {
-        const savedQuestions = sessionStorage.getItem('filtered_questions');
-        if (savedQuestions) {
-            try {
-                const parsed = JSON.parse(savedQuestions);
-                setQuestions(parsed);
-                setLoading(false);
-            } catch (e) {
-                console.error("Error parsing questions from sessionStorage:", e);
-                showAlert("Erro ao carregar questões do quiz", "error");
-                router.push("/dashboard/questions");
+        const questionId = searchParams.get('id');
+
+        const loadQuestions = async () => {
+            if (questionId) {
+                // Load specific question from Firestore
+                try {
+                    const questionDoc = await getDoc(doc(db, "questions", questionId));
+                    if (questionDoc.exists()) {
+                        setQuestions([{ id: questionDoc.id, ...questionDoc.data() }]);
+                        setLoading(false);
+                    } else {
+                        showAlert("Questão não encontrada", "error");
+                        router.push("/dashboard/questions");
+                    }
+                } catch (e) {
+                    console.error("Error fetching shared question:", e);
+                    showAlert("Erro ao carregar questão compartilhada", "error");
+                    router.push("/dashboard/questions");
+                }
+            } else {
+                // Standard flow: Load from sessionStorage
+                const savedQuestions = sessionStorage.getItem('filtered_questions');
+                if (savedQuestions) {
+                    try {
+                        const parsed = JSON.parse(savedQuestions);
+                        setQuestions(parsed);
+                        setLoading(false);
+                    } catch (e) {
+                        console.error("Error parsing questions from sessionStorage:", e);
+                        showAlert("Erro ao carregar questões do quiz", "error");
+                        router.push("/dashboard/questions");
+                    }
+                } else {
+                    router.push("/dashboard/questions");
+                }
             }
-        } else {
-            router.push("/dashboard/questions");
-        }
-    }, [router, showAlert]);
+        };
+
+        loadQuestions();
+    }, [router, showAlert, searchParams]);
 
     // Fetch User Credits & Attempts
     useEffect(() => {
@@ -121,6 +146,60 @@ export default function SolveQuizClient() {
         }));
     };
 
+    const handleShare = async () => {
+        const currentQuestion = questions[currentIndex];
+        if (!currentQuestion) return;
+
+        const url = `${window.location.origin}/dashboard/questions/solve?id=${currentQuestion.id}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showAlert("Link da questão copiado!", "success");
+        } catch (err) {
+            console.error("Failed to copy: ", err);
+            showAlert("Erro ao copiar o link.", "error");
+        }
+    };
+
+    if (authLoading) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+                <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+            </div>
+        );
+    }
+
+    const questionId = searchParams.get('id');
+    if (!user && questionId) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+                <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Lock className="w-10 h-10 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-4">Login Necessário</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mb-8 font-medium leading-relaxed">
+                        Para visualizar e resolver esta questão compartilhada, você precisa estar conectado à sua conta.
+                    </p>
+                    <div className="space-y-4">
+                        <button
+                            onClick={signInWithGoogle}
+                            className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl shadow-lg shadow-violet-500/30 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                        >
+                            <User className="w-5 h-5" />
+                            Acessar com Google
+                        </button>
+                        <button
+                            onClick={() => router.push('/dashboard/questions')}
+                            className="w-full py-4 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        >
+                            Voltar para o Banco de Questões
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const confirmAndNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
         const currentAnswer = answers[currentIndex];
         const currentQuestion = questions[currentIndex];
@@ -178,7 +257,7 @@ export default function SolveQuizClient() {
             showAlert(
                 "Deseja finalizar o quiz e ver o resultado?",
                 "info",
-                "Finalizar Quiz",
+                "Ver resultado",
                 () => handleFinish()
             );
         } else {
@@ -362,13 +441,13 @@ export default function SolveQuizClient() {
                                     showAlert(
                                         "Deseja finalizar o quiz e ver o resultado?",
                                         "info",
-                                        "Finalizar Quiz",
+                                        "Ver resultado",
                                         () => handleFinish()
                                     );
                                 }}
                                 className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition whitespace-nowrap"
                             >
-                                <span className="hidden md:inline">Finalizar Quiz</span>
+                                <span className="hidden md:inline">Ver resultado</span>
                                 <span className="md:hidden">Fim</span>
                             </button>
                         </div>
@@ -440,10 +519,21 @@ export default function SolveQuizClient() {
                                 })}
                             </div>
 
-                            {/* Comments Button */}
-                            <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-violet-600 transition-colors">
-                                <MessageSquare className="w-4 h-4" /> {showComments ? "Ocultar Comentários" : "Ver Comentários"}
-                            </button>
+                            {/* Actions Row */}
+                            <div className="flex items-center justify-between">
+                                {/* Comments Button */}
+                                <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-violet-600 transition-colors">
+                                    <MessageSquare className="w-4 h-4" /> {showComments ? "Ocultar Comentários" : "Ver Comentários"}
+                                </button>
+
+                                {/* Share Button */}
+                                <button
+                                    onClick={handleShare}
+                                    className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                                >
+                                    <Share2 className="w-4 h-4" /> Compartilhar
+                                </button>
+                            </div>
                             {showComments && (
                                 <div className="h-[400px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4">
                                     <CommentsSection questionId={currentQuestion.id} />
@@ -458,7 +548,7 @@ export default function SolveQuizClient() {
                             <ChevronLeft className="w-5 h-5" /> Anterior
                         </button>
                         <button onClick={confirmAndNext} className="flex items-center gap-3 bg-violet-600 text-white px-8 py-3 rounded-2xl font-black transition shadow-xl shadow-violet-500/20 hover:bg-violet-700 active:scale-95">
-                            {currentIndex === questions.length - 1 ? 'Finalizar' : 'Próxima'} <ChevronRight className="w-5 h-5" />
+                            {currentIndex === questions.length - 1 ? 'Ver resultado' : 'Próxima'} <ChevronRight className="w-5 h-5" />
                         </button>
                     </div>
 

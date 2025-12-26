@@ -1220,7 +1220,7 @@ export default function Dashboard() {
 
                                 <button
                                     onClick={() => router.push('/dashboard/send-exam')}
-                                    className="px-8 py-4 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl shadow-lg shadow-violet-200 dark:shadow-none hover:shadow-xl transition-all transform hover:-translate-y-1 flex items-center gap-3 mx-auto"
+                                    className="px-8 py-4 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl shadow-lg shadow-violet-500/25 dark:shadow-none focus:outline-none focus:ring-0 focus:shadow-none hover:shadow-xl transition-all transform hover:-translate-y-1 flex items-center gap-3 mx-auto"
                                 >
                                     <div className="p-1 bg-white/20 rounded-lg">
                                         <Upload className="w-6 h-6" />
