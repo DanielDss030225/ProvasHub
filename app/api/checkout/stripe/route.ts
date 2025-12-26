@@ -47,7 +47,7 @@ export async function POST(req: Request) {
                         currency: 'brl',
                         product_data: {
                             name: `Pacote ${pack.name} - ProvasHub`,
-                            description: `${pack.coins} Coins para resolver questões e simulados.`,
+                            description: `${pack.coins} Coins para resolver provas e simulados.`,
                         },
                         unit_amount: Math.round(pack.price * 100),
                     },
