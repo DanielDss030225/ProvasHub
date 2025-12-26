@@ -9,7 +9,7 @@ import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDo
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { motion, Variants } from "framer-motion";
 
-import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play } from "lucide-react";
+import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play, CreditCard, Smartphone, Zap, Sparkles } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { FormattedText } from "../components/FormattedText";
 import { ImageCropper } from "../components/ImageCropper";
@@ -44,6 +44,12 @@ const sidebarVariants: any = {
     visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const } }
 };
 
+const CREDIT_PACKAGES = [
+    { id: 'silver', name: 'Prata', coins: 150, price: 'R$ 1,50', description: 'Ideal para começar', color: 'slate' },
+    { id: 'gold', name: 'Ouro', coins: 500, price: 'R$ 4,00', description: 'Melhor custo-benefício', popular: true, color: 'violet' },
+    { id: 'diamond', name: 'Diamante', coins: 1500, price: 'R$ 12,00', description: 'Com o maior desconto', color: 'emerald' },
+];
+
 export default function Dashboard() {
     const { user, loading } = useAuth();
     const router = useRouter();
@@ -73,7 +79,13 @@ export default function Dashboard() {
     const [examRequests, setExamRequests] = useState<any[]>([]);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [pendingExam, setPendingExam] = useState<{ id: string, title: string, userId: string } | null>(null);
-
+    // Purchase Credits States
+    const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+    const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+    const [selectedPackage, setSelectedPackage] = useState<any>(null);
+    const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | null>(null);
+    const [isPurchasing, setIsPurchasing] = useState(false);
+    const [pixData, setPixData] = useState<{ qrCodeImage?: string, qrCodeText?: string, reference?: string } | null>(null);
 
 
     const handleDeleteRequest = async (e: React.MouseEvent, requestId: string) => {
@@ -800,6 +812,72 @@ export default function Dashboard() {
         }
     };
 
+    const handleCreatePix = async (pack: any) => {
+        if (!user) return;
+        setIsPurchasing(true);
+        setPixData(null);
+
+        try {
+            const response = await fetch('/api/checkout/pix', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    packageId: pack.id,
+                    userId: user.uid,
+                    userName: user.displayName,
+                    userEmail: user.email
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erro ao gerar Pix');
+
+            setPixData({
+                qrCodeImage: data.qrCodeImage,
+                qrCodeText: data.qrCodeText,
+                reference: data.reference
+            });
+
+            showAlert("Pix gerado com sucesso! Use o QR Code ou Copia e Cola para pagar.", "info", "Aguardando Pagamento");
+        } catch (error: any) {
+            console.error("Pix generation failed:", error);
+            showAlert("Erro: " + error.message, "error", "Erro");
+        } finally {
+            setIsPurchasing(false);
+        }
+    };
+
+    const handlePurchaseCompleted = async (pack: any) => {
+        if (!user) return;
+        setIsPurchasing(true);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const userRef = doc(db, "users", user.uid);
+                const userDoc = await transaction.get(userRef);
+
+                if (!userDoc.exists()) throw new Error("Usuário não encontrado");
+
+                const currentCredits = userDoc.data().credits || 0;
+                transaction.update(userRef, {
+                    credits: currentCredits + pack.coins,
+                    totalPurchased: increment(pack.coins)
+                });
+            });
+
+            showAlert(`Você adquiriu ${pack.coins} coins com sucesso!`, "success", "Compra Realizada");
+            setIsCheckoutModalOpen(false);
+            setIsStoreModalOpen(false);
+            setPaymentMethod(null);
+            setSelectedPackage(null);
+        } catch (error: any) {
+            console.error("Purchase failed:", error);
+            showAlert("Erro ao processar compra: " + error.message, "error", "Erro");
+        } finally {
+            setIsPurchasing(false);
+        }
+    };
+
 
 
 
@@ -973,12 +1051,24 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setIsCreditsModalOpen(false)}
-                            className="mt-6 w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition"
-                        >
-                            Entendi
-                        </button>
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => {
+                                    setIsCreditsModalOpen(false);
+                                    setIsStoreModalOpen(true);
+                                }}
+                                className="flex-1 py-3 bg-violet-600 text-white font-bold rounded-xl hover:bg-violet-700 shadow-lg shadow-violet-200 dark:shadow-none transition flex items-center justify-center gap-2"
+                            >
+                                <Coins className="w-5 h-5" />
+                                Comprar Coins
+                            </button>
+                            <button
+                                onClick={() => setIsCreditsModalOpen(false)}
+                                className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                            >
+                                Entendi
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1086,6 +1176,232 @@ export default function Dashboard() {
                                                 </span>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+
+            {/* Store Modal */}
+            {isStoreModalOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsStoreModalOpen(false)}>
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl p-6 relative animate-in zoom-in-95 max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-start mb-8 text-center pt-2">
+                            <div className="mx-auto">
+                                <h3 className="text-3xl font-black text-slate-800 dark:text-white mb-2 flex items-center justify-center gap-3">
+                                    <Sparkles className="w-8 h-8 text-violet-500 animate-pulse" />
+                                    Loja de Coins
+                                </h3>
+                                <p className="text-slate-500 dark:text-slate-400 font-medium">Escolha um pacote e turbine seus estudos</p>
+                            </div>
+                            <button onClick={() => setIsStoreModalOpen(false)} className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            {CREDIT_PACKAGES.map((pack) => (
+                                <div
+                                    key={pack.id}
+                                    className={clsx(
+                                        "relative group flex flex-col p-6 rounded-3xl border-2 transition-all cursor-pointer transform hover:-translate-y-1",
+                                        pack.popular
+                                            ? "border-violet-500 bg-violet-50/30 dark:bg-violet-900/10 shadow-xl shadow-violet-500/10"
+                                            : "border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+                                    )}
+                                    onClick={() => {
+                                        setSelectedPackage(pack);
+                                        setIsCheckoutModalOpen(true);
+                                    }}
+                                >
+                                    {pack.popular && (
+                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">
+                                            Mais Popular
+                                        </div>
+                                    )}
+
+                                    <div className={clsx(
+                                        "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-colors",
+                                        pack.color === 'slate' ? "bg-slate-100 text-slate-600" :
+                                            pack.color === 'violet' ? "bg-violet-100 text-violet-600" :
+                                                "bg-emerald-100 text-emerald-600"
+                                    )}>
+                                        <Coins className="w-6 h-6" />
+                                    </div>
+
+                                    <h4 className="text-lg font-black text-slate-800 dark:text-white mb-1">{pack.name}</h4>
+                                    <p className="text-3xl font-black text-slate-900 dark:text-white mb-2">{pack.coins} <span className="text-sm font-medium text-slate-500">coins</span></p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-6 flex-1">{pack.description}</p>
+
+                                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                        <div className="text-2xl font-black text-violet-600 dark:text-violet-400">{pack.price}</div>
+                                        <button className="w-full mt-4 py-3 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white font-bold text-sm group-hover:bg-violet-600 transition-colors shadow-lg shadow-black/10">
+                                            Selecionar
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 text-center">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center justify-center gap-2">
+                                <Zap className="w-4 h-4 text-amber-500" />
+                                100% dos créditos são usados para recompensar autores e validar novos conteúdos
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Checkout Modal Simulation */}
+            {isCheckoutModalOpen && selectedPackage && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200" onClick={() => !isPurchasing && setIsCheckoutModalOpen(false)}>
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[32px] shadow-2xl p-8 relative animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-white">Pagamento</h3>
+                            <button onClick={() => !isPurchasing && setIsCheckoutModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-[24px] mb-8 border border-slate-100 dark:border-slate-700">
+                            <div className="flex justify-between text-sm text-slate-500 mb-2">
+                                <span>Item Selecionado</span>
+                                <span>Preço</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="font-black text-slate-800 dark:text-white text-lg">Pacote {selectedPackage.name} ({selectedPackage.coins} coins)</span>
+                                <span className="font-black text-violet-600 dark:text-violet-400 text-xl">{selectedPackage.price}</span>
+                            </div>
+                        </div>
+
+                        {!paymentMethod ? (
+                            <div className="space-y-4">
+                                <p className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-2">Meio de Pagamento</p>
+                                <button
+                                    onClick={() => {
+                                        setPaymentMethod('pix');
+                                        handleCreatePix(selectedPackage);
+                                    }}
+                                    className="w-full p-5 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-emerald-900/10 transition-all flex items-center gap-4 group"
+                                >
+                                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                        <Smartphone className="w-6 h-6" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-slate-800 dark:text-white">Pix</p>
+                                        <p className="text-xs text-slate-500">Aprovação instantânea</p>
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => setPaymentMethod('card')}
+                                    className="w-full p-5 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-violet-500 hover:bg-violet-50/30 dark:hover:bg-violet-900/10 transition-all flex items-center gap-4 group"
+                                >
+                                    <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                        <CreditCard className="w-6 h-6" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-slate-800 dark:text-white">Cartão de Crédito</p>
+                                        <p className="text-xs text-slate-500">Visa, Mastercard, Elo</p>
+                                    </div>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="animate-in fade-in slide-in-from-right-4">
+                                {paymentMethod === 'pix' ? (
+                                    <div className="text-center space-y-6">
+                                        {isPurchasing ? (
+                                            <div className="w-48 h-48 bg-slate-50 dark:bg-slate-800 rounded-3xl mx-auto flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                                                <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Gerando Código...</p>
+                                            </div>
+                                        ) : pixData ? (
+                                            <>
+                                                <div className="w-48 h-48 bg-white rounded-3xl mx-auto flex items-center justify-center p-2 border-4 border-emerald-500 shadow-xl shadow-emerald-500/10">
+                                                    <img src={pixData.qrCodeImage} alt="Pix QR Code" className="w-full h-full object-contain" />
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <p className="font-black text-slate-800 dark:text-white">Escaneie o QR Code</p>
+                                                        <p className="text-xs text-slate-500">Pagamento via Pix (PagBank)</p>
+                                                    </div>
+
+                                                    <div className="relative group">
+                                                        <input
+                                                            readOnly
+                                                            value={pixData.qrCodeText}
+                                                            className="w-full p-3 pr-12 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 text-[10px] font-mono text-slate-500 truncate"
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(pixData.qrCodeText || '');
+                                                                showAlert("Código Pix copiado!", "success");
+                                                            }}
+                                                            className="absolute right-2 top-1.5 p-1.5 bg-white dark:bg-slate-700 shadow-sm border border-slate-100 dark:border-slate-600 rounded-lg text-emerald-600 hover:scale-110 transition-transform"
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+
+                                                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+                                                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold leading-relaxed">
+                                                            A confirmação é automática. Assim que você pagar, seus coins aparecerão no saldo!
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="py-8">
+                                                <p className="text-sm text-slate-500 mb-4">Ocorreu um problema ao gerar o Pix.</p>
+                                                <button onClick={() => handleCreatePix(selectedPackage)} className="text-violet-600 font-bold hover:underline">Tentar Novamente</button>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={() => {
+                                                setPaymentMethod(null);
+                                                setPixData(null);
+                                            }}
+                                            className="text-sm font-bold text-slate-400 hover:text-slate-600"
+                                        >
+                                            Voltar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Número do Cartão</label>
+                                                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono text-lg">
+                                                    **** **** **** 1234
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Validade</label>
+                                                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono">
+                                                        MM/AA
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">CVV</label>
+                                                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono">
+                                                        ***
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => handlePurchaseCompleted(selectedPackage)}
+                                            disabled={isPurchasing}
+                                            className="w-full py-5 bg-violet-600 hover:bg-violet-700 text-white font-black rounded-[24px] shadow-xl shadow-violet-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {isPurchasing ? <Loader2 className="w-6 h-6 animate-spin" /> : "Simular Pagamento Confirmado"}
+                                        </button>
+                                        <button onClick={() => setPaymentMethod(null)} className="w-full text-center text-sm font-bold text-slate-400 hover:text-slate-600">Voltar</button>
                                     </div>
                                 )}
                             </div>
