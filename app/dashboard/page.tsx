@@ -1296,18 +1296,6 @@ export default function Dashboard() {
                                         <p className="text-xs text-slate-500">Aprovação instantânea</p>
                                     </div>
                                 </button>
-                                <button
-                                    onClick={() => setPaymentMethod('card')}
-                                    className="w-full p-5 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-violet-500 hover:bg-violet-50/30 dark:hover:bg-violet-900/10 transition-all flex items-center gap-4 group"
-                                >
-                                    <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                        <CreditCard className="w-6 h-6" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-black text-slate-800 dark:text-white">Cartão de Crédito</p>
-                                        <p className="text-xs text-slate-500">Visa, Mastercard, Elo</p>
-                                    </div>
-                                </button>
                             </div>
                         ) : (
                             <div className="animate-in fade-in slide-in-from-right-4">
