@@ -71,7 +71,8 @@ export async function POST(req: Request) {
             headers: {
                 'Authorization': `Bearer ${PAGSEGURO_TOKEN}`,
                 'Content-Type': 'application/json',
-                'accept': 'application/json'
+                'accept': 'application/json',
+                'x-api-version': '4.0'
             },
             body: JSON.stringify(orderBody)
         });
