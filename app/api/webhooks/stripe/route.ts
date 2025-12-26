@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { db } from '../../../../lib/firebase';
-import { doc, runTransaction, increment } from 'firebase/firestore';
+import { doc, runTransaction, increment, collection } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,9 +54,10 @@ export async function POST(req: Request) {
                             lastPurchaseAt: new Date()
                         });
 
-                        // Create notification
-                        const notificationRef = doc(db, "users", userId, "notifications", `pay_${session.id}`);
+                        // Create notification in the global 'notifications' collection
+                        const notificationRef = doc(collection(db, "notifications"));
                         transaction.set(notificationRef, {
+                            userId: userId, // Important for the query
                             type: 'payment_success',
                             title: 'Pagamento Confirmado!',
                             message: `Parabéns! Você recebeu ${coins} coins.`,
