@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         }
 
         const session = await stripe.checkout.sessions.create({
-            // Removido payment_method_types para permitir que a Stripe use as configurações do seu Dashboard automaticamente
+            payment_method_types: ['card'],
             line_items: [
                 {
                     price_data: {
