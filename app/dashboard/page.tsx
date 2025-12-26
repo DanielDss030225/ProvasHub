@@ -829,7 +829,10 @@ export default function Dashboard() {
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Erro ao iniciar checkout');
+            if (!response.ok) {
+                const errorMessage = data.details ? `${data.error}: ${data.details}` : (data.error || 'Erro ao iniciar checkout');
+                throw new Error(errorMessage);
+            }
 
             if (data.url) {
                 window.location.href = data.url;
