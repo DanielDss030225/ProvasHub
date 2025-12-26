@@ -64,6 +64,26 @@ function SendExamContent() {
         return () => clearInterval(interval);
     }, [uploading, timeLeft]);
 
+    // Update progress bar based on elapsed time (0:00 = 0%, 2:50 = 100%)
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        const totalTime = 170; // 2:50 in seconds
+
+        if (uploading && progress < 90) {
+            interval = setInterval(() => {
+                setProgress((prev) => {
+                    const elapsed = totalTime - timeLeft;
+                    const calculatedProgress = (elapsed / totalTime) * 100;
+
+                    // Cap at 90% until API returns
+                    return Math.min(calculatedProgress, 90);
+                });
+            }, 1000); // Update every second
+        }
+
+        return () => clearInterval(interval);
+    }, [uploading, timeLeft, progress]);
+
     useEffect(() => {
         if (activityLog.length > 0) {
             logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
