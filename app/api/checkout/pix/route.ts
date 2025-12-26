@@ -81,7 +81,12 @@ export async function POST(req: Request) {
 
         if (!response.ok) {
             console.error('PagSeguro API Error:', data);
-            return NextResponse.json({ error: 'Erro ao criar pedido no PagSeguro', details: data }, { status: response.status });
+            // Retornamos os detalhes para que possamos ver no erro do navegador
+            return NextResponse.json({
+                error: 'Erro no PagSeguro',
+                message: data.error_messages?.[0]?.description || 'Erro desconhecido',
+                details: data
+            }, { status: response.status });
         }
 
         // Extract QR Code info
@@ -97,6 +102,6 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error('Checkout API Error:', error);
-        return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
+        return NextResponse.json({ error: 'Erro interno no servidor', message: error.message }, { status: 500 });
     }
 }

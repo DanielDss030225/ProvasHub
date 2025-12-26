@@ -812,13 +812,12 @@ export default function Dashboard() {
         }
     };
 
-    const handleCreatePix = async (pack: any) => {
+    const handleCreateStripeCheckout = async (pack: any) => {
         if (!user) return;
         setIsPurchasing(true);
-        setPixData(null);
 
         try {
-            const response = await fetch('/api/checkout/pix', {
+            const response = await fetch('/api/checkout/stripe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -830,17 +829,15 @@ export default function Dashboard() {
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Erro ao gerar Pix');
+            if (!response.ok) throw new Error(data.error || 'Erro ao iniciar checkout');
 
-            setPixData({
-                qrCodeImage: data.qrCodeImage,
-                qrCodeText: data.qrCodeText,
-                reference: data.reference
-            });
-
-            showAlert("Pix gerado com sucesso! Use o QR Code ou Copia e Cola para pagar.", "info", "Aguardando Pagamento");
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                throw new Error('URL de checkout não recebida');
+            }
         } catch (error: any) {
-            console.error("Pix generation failed:", error);
+            console.error("Stripe Checkout failed:", error);
             showAlert("Erro: " + error.message, "error", "Erro");
         } finally {
             setIsPurchasing(false);
@@ -1278,122 +1275,33 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {!paymentMethod ? (
-                            <div className="space-y-4">
-                                <p className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest pl-2">Meio de Pagamento</p>
-                                <button
-                                    onClick={() => {
-                                        setPaymentMethod('pix');
-                                        handleCreatePix(selectedPackage);
-                                    }}
-                                    className="w-full p-5 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-emerald-900/10 transition-all flex items-center gap-4 group"
-                                >
-                                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                        <Smartphone className="w-6 h-6" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-black text-slate-800 dark:text-white">Pix</p>
-                                        <p className="text-xs text-slate-500">Aprovação instantânea</p>
-                                    </div>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="animate-in fade-in slide-in-from-right-4">
-                                {paymentMethod === 'pix' ? (
-                                    <div className="text-center space-y-6">
-                                        {isPurchasing ? (
-                                            <div className="w-48 h-48 bg-slate-50 dark:bg-slate-800 rounded-3xl mx-auto flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-200 dark:border-slate-700">
-                                                <Loader2 className="w-10 h-10 animate-spin text-emerald-500" />
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Gerando Código...</p>
-                                            </div>
-                                        ) : pixData ? (
-                                            <>
-                                                <div className="w-48 h-48 bg-white rounded-3xl mx-auto flex items-center justify-center p-2 border-4 border-emerald-500 shadow-xl shadow-emerald-500/10">
-                                                    <img src={pixData.qrCodeImage} alt="Pix QR Code" className="w-full h-full object-contain" />
-                                                </div>
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <p className="font-black text-slate-800 dark:text-white">Escaneie o QR Code</p>
-                                                        <p className="text-xs text-slate-500">Pagamento via Pix (PagBank)</p>
-                                                    </div>
+                        <div className="space-y-6">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                                Você será redirecionado para o portal seguro da <span className="font-bold text-slate-800 dark:text-white">Stripe</span> para concluir o pagamento via <span className="font-bold text-emerald-600">Pix</span> ou <span className="font-bold text-violet-600">Cartão</span>.
+                            </p>
 
-                                                    <div className="relative group">
-                                                        <input
-                                                            readOnly
-                                                            value={pixData.qrCodeText}
-                                                            className="w-full p-3 pr-12 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 text-[10px] font-mono text-slate-500 truncate"
-                                                        />
-                                                        <button
-                                                            onClick={() => {
-                                                                navigator.clipboard.writeText(pixData.qrCodeText || '');
-                                                                showAlert("Código Pix copiado!", "success");
-                                                            }}
-                                                            className="absolute right-2 top-1.5 p-1.5 bg-white dark:bg-slate-700 shadow-sm border border-slate-100 dark:border-slate-600 rounded-lg text-emerald-600 hover:scale-110 transition-transform"
-                                                        >
-                                                            <Check className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-
-                                                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
-                                                        <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold leading-relaxed">
-                                                            A confirmação é automática. Assim que você pagar, seus coins aparecerão no saldo!
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="py-8">
-                                                <p className="text-sm text-slate-500 mb-4">Ocorreu um problema ao gerar o Pix.</p>
-                                                <button onClick={() => handleCreatePix(selectedPackage)} className="text-violet-600 font-bold hover:underline">Tentar Novamente</button>
-                                            </div>
-                                        )}
-
-                                        <button
-                                            onClick={() => {
-                                                setPaymentMethod(null);
-                                                setPixData(null);
-                                            }}
-                                            className="text-sm font-bold text-slate-400 hover:text-slate-600"
-                                        >
-                                            Voltar
-                                        </button>
-                                    </div>
+                            <button
+                                onClick={() => handleCreateStripeCheckout(selectedPackage)}
+                                disabled={isPurchasing}
+                                className="w-full py-5 rounded-[24px] bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 font-black text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-black/10 flex items-center justify-center gap-3 disabled:opacity-50"
+                            >
+                                {isPurchasing ? (
+                                    <>
+                                        <Loader2 className="w-6 h-6 animate-spin" />
+                                        <span>Processando...</span>
+                                    </>
                                 ) : (
-                                    <div className="space-y-6">
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Número do Cartão</label>
-                                                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono text-lg">
-                                                    **** **** **** 1234
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Validade</label>
-                                                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono">
-                                                        MM/AA
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">CVV</label>
-                                                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 text-slate-400 font-mono">
-                                                        ***
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => handlePurchaseCompleted(selectedPackage)}
-                                            disabled={isPurchasing}
-                                            className="w-full py-5 bg-violet-600 hover:bg-violet-700 text-white font-black rounded-[24px] shadow-xl shadow-violet-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                                        >
-                                            {isPurchasing ? <Loader2 className="w-6 h-6 animate-spin" /> : "Simular Pagamento Confirmado"}
-                                        </button>
-                                        <button onClick={() => setPaymentMethod(null)} className="w-full text-center text-sm font-bold text-slate-400 hover:text-slate-600">Voltar</button>
-                                    </div>
+                                    <>
+                                        <Zap className="w-6 h-6 text-yellow-400 fill-yellow-400" />
+                                        <span>Ir para Pagamento</span>
+                                    </>
                                 )}
-                            </div>
-                        )}
+                            </button>
+
+                            <p className="text-[10px] text-center text-slate-400 uppercase font-black tracking-widest">
+                                Pagamento Seguro via Stripe
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -2198,128 +2106,132 @@ export default function Dashboard() {
                 </div>
             </div>
             {/* Modal: Continuar para a prova (Post-Login Redirect) */}
-            {pendingExam && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-                    <div
-                        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
-                        onClick={() => {
-                            localStorage.removeItem('pending_exam_id');
-                            localStorage.removeItem('pending_exam_title');
-                            localStorage.removeItem('pending_exam_user_id');
-                            setPendingExam(null);
-                        }}
-                    />
-                    <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-8 animate-in zoom-in-95 duration-300">
-                        <div className="flex flex-col items-center text-center space-y-6">
-                            <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center text-violet-600 dark:text-violet-400">
-                                <Play className="w-10 h-10 fill-current" />
-                            </div>
-
-                            <div className="space-y-2">
-                                <h3 className="text-2xl font-black text-slate-800 dark:text-white">
-                                    Vamos continuar?
-                                </h3>
-                                <p className="text-slate-500 dark:text-slate-400 font-medium">
-                                    Você clicou para resolver a prova: <br />
-                                    <span className="text-violet-600 dark:text-violet-400 font-bold">"{pendingExam.title}"</span>
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col w-full gap-3">
-                                <button
-                                    onClick={() => {
-                                        const { id, title, userId } = pendingExam;
-                                        localStorage.removeItem('pending_exam_id');
-                                        localStorage.removeItem('pending_exam_title');
-                                        localStorage.removeItem('pending_exam_user_id');
-                                        setPendingExam(null);
-
-                                        if (user.uid === userId) {
-                                            router.push(`/dashboard/solve/${id}`);
-                                        } else {
-                                            setConfirmingSolveExam({
-                                                id,
-                                                userId,
-                                                extractedData: { title }
-                                            });
-                                        }
-                                    }}
-                                    className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black shadow-lg shadow-violet-500/25 transition-all active:scale-95 flex items-center justify-center gap-2"
-                                >
-                                    <Play className="w-4 h-4" />
-                                    CONTINUAR PARA A PROVA
-                                </button>
-
-                                <button
-                                    onClick={() => {
-                                        localStorage.removeItem('pending_exam_id');
-                                        localStorage.removeItem('pending_exam_title');
-                                        localStorage.removeItem('pending_exam_user_id');
-                                        setPendingExam(null);
-                                    }}
-                                    className="w-full py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-bold transition-all active:scale-95"
-                                >
-                                    Agora não, obrigado
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Mobile Notifications Modal */}
-            {isMobileNotificationsOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 lg:hidden">
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
-                        onClick={() => setIsMobileNotificationsOpen(false)}
-                    />
-                    <div className="relative bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
-                        {/* Header */}
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-800/50">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl">
-                                    <Bell className="w-5 h-5" />
+            {
+                pendingExam && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
+                        <div
+                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+                            onClick={() => {
+                                localStorage.removeItem('pending_exam_id');
+                                localStorage.removeItem('pending_exam_title');
+                                localStorage.removeItem('pending_exam_user_id');
+                                setPendingExam(null);
+                            }}
+                        />
+                        <div className="relative bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-8 animate-in zoom-in-95 duration-300">
+                            <div className="flex flex-col items-center text-center space-y-6">
+                                <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center text-violet-600 dark:text-violet-400">
+                                    <Play className="w-10 h-10 fill-current" />
                                 </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">Notificações</h3>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                        {notifications.filter(n => !n.read).length} não lidas
+
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-black text-slate-800 dark:text-white">
+                                        Vamos continuar?
+                                    </h3>
+                                    <p className="text-slate-500 dark:text-slate-400 font-medium">
+                                        Você clicou para resolver a prova: <br />
+                                        <span className="text-violet-600 dark:text-violet-400 font-bold">"{pendingExam.title}"</span>
                                     </p>
                                 </div>
+
+                                <div className="flex flex-col w-full gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const { id, title, userId } = pendingExam;
+                                            localStorage.removeItem('pending_exam_id');
+                                            localStorage.removeItem('pending_exam_title');
+                                            localStorage.removeItem('pending_exam_user_id');
+                                            setPendingExam(null);
+
+                                            if (user.uid === userId) {
+                                                router.push(`/dashboard/solve/${id}`);
+                                            } else {
+                                                setConfirmingSolveExam({
+                                                    id,
+                                                    userId,
+                                                    extractedData: { title }
+                                                });
+                                            }
+                                        }}
+                                        className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl font-black shadow-lg shadow-violet-500/25 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <Play className="w-4 h-4" />
+                                        CONTINUAR PARA A PROVA
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            localStorage.removeItem('pending_exam_id');
+                                            localStorage.removeItem('pending_exam_title');
+                                            localStorage.removeItem('pending_exam_user_id');
+                                            setPendingExam(null);
+                                        }}
+                                        className="w-full py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-bold transition-all active:scale-95"
+                                    >
+                                        Agora não, obrigado
+                                    </button>
+                                </div>
                             </div>
-                            <button
-                                onClick={() => setIsMobileNotificationsOpen(false)}
-                                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
                         </div>
+                    </div>
+                )
+            }
 
-                        {/* Notifications List */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-900">
-                            {renderNotificationsList()}
-                        </div>
-
-                        {/* Footer */}
-                        {notifications.length > 0 && notifications.some(n => !n.read) && (
-                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+            {/* Mobile Notifications Modal */}
+            {
+                isMobileNotificationsOpen && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 lg:hidden">
+                        <div
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
+                            onClick={() => setIsMobileNotificationsOpen(false)}
+                        />
+                        <div className="relative bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                            {/* Header */}
+                            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-800/50">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl">
+                                        <Bell className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">Notificações</h3>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                            {notifications.filter(n => !n.read).length} não lidas
+                                        </p>
+                                    </div>
+                                </div>
                                 <button
-                                    onClick={async () => {
-                                        const unread = notifications.filter(n => !n.read);
-                                        for (const n of unread) {
-                                            await handleMarkAsRead(n.id);
-                                        }
-                                    }}
-                                    className="w-full py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition active:scale-[0.98] text-sm"
+                                    onClick={() => setIsMobileNotificationsOpen(false)}
+                                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
                                 >
-                                    Marcar todas como lidas
+                                    <X className="w-6 h-6" />
                                 </button>
                             </div>
-                        )}
+
+                            {/* Notifications List */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-900">
+                                {renderNotificationsList()}
+                            </div>
+
+                            {/* Footer */}
+                            {notifications.length > 0 && notifications.some(n => !n.read) && (
+                                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                                    <button
+                                        onClick={async () => {
+                                            const unread = notifications.filter(n => !n.read);
+                                            for (const n of unread) {
+                                                await handleMarkAsRead(n.id);
+                                            }
+                                        }}
+                                        className="w-full py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition active:scale-[0.98] text-sm"
+                                    >
+                                        Marcar todas como lidas
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
-        </motion.div>
+                )
+            }
+        </motion.div >
     );
 }
