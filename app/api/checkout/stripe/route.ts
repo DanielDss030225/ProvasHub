@@ -23,7 +23,13 @@ export async function POST(req: Request) {
         const { packageId, userId, userName, userEmail } = await req.json();
 
         if (!process.env.STRIPE_SECRET_KEY) {
-            return NextResponse.json({ error: 'Configuração da Stripe faltando' }, { status: 500 });
+            console.error('STRIPE_SECRET_KEY is missing');
+            return NextResponse.json({ error: 'Configuração da Stripe faltando (Secret Key)' }, { status: 500 });
+        }
+
+        if (!process.env.NEXT_PUBLIC_APP_URL) {
+            console.error('NEXT_PUBLIC_APP_URL is missing');
+            return NextResponse.json({ error: 'Configuração do App faltando (APP_URL)' }, { status: 500 });
         }
 
         const stripe = getStripe();
