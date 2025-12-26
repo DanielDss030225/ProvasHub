@@ -69,20 +69,20 @@ function SendExamContent() {
         let interval: NodeJS.Timeout;
         const totalTime = 170; // 2:50 in seconds
 
-        if (uploading && progress < 90) {
+        if (uploading) {
             interval = setInterval(() => {
                 setProgress((prev) => {
                     const elapsed = totalTime - timeLeft;
                     const calculatedProgress = (elapsed / totalTime) * 100;
 
-                    // Cap at 90% until API returns
-                    return Math.min(calculatedProgress, 90);
+                    // Allow progress to reach 100%
+                    return Math.min(calculatedProgress, 100);
                 });
             }, 1000); // Update every second
         }
 
         return () => clearInterval(interval);
-    }, [uploading, timeLeft, progress]);
+    }, [uploading, timeLeft]);
 
     useEffect(() => {
         if (activityLog.length > 0) {
