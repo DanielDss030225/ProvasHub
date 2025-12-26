@@ -3,9 +3,16 @@ import Stripe from 'stripe';
 import { db } from '../../../../lib/firebase';
 import { doc, runTransaction, increment } from 'firebase/firestore';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-01-27-preview' as any,
-});
+export const dynamic = 'force-dynamic';
+
+const getStripe = () => {
+    if (!process.env.STRIPE_SECRET_KEY) {
+        throw new Error('STRIPE_SECRET_KEY is not defined');
+    }
+    return new Stripe(process.env.STRIPE_SECRET_KEY, {
+        apiVersion: '2025-01-27-preview' as any,
+    });
+};
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -14,10 +21,10 @@ export async function POST(req: Request) {
     const sig = req.headers.get('stripe-signature')!;
 
     let event: Stripe.Event;
+    const stripe = getStripe();
 
     try {
         if (!endpointSecret) {
-            // If secret is not set, we can't verify authenticity, but for now we log
             console.warn('STRIPE_WEBHOOK_SECRET is missing. Skipping verification (not recommended for production)');
             event = JSON.parse(body);
         } else {
@@ -28,7 +35,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
     }
 
-    // Handle the event
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
 

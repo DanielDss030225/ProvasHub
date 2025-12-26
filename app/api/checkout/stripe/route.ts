@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-01-27-preview' as any,
-});
+export const dynamic = 'force-dynamic';
+
+const getStripe = () => {
+    if (!process.env.STRIPE_SECRET_KEY) {
+        throw new Error('STRIPE_SECRET_KEY is not defined');
+    }
+    return new Stripe(process.env.STRIPE_SECRET_KEY, {
+        apiVersion: '2025-01-27-preview' as any,
+    });
+};
 
 const CREDIT_PACKAGES = {
     'silver': { coins: 150, price: 1.50, name: 'Prata' },
@@ -18,6 +25,8 @@ export async function POST(req: Request) {
         if (!process.env.STRIPE_SECRET_KEY) {
             return NextResponse.json({ error: 'Configuração da Stripe faltando' }, { status: 500 });
         }
+
+        const stripe = getStripe();
 
         const pack = CREDIT_PACKAGES[packageId as keyof typeof CREDIT_PACKAGES];
         if (!pack) {
