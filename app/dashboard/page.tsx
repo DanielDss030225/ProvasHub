@@ -428,19 +428,19 @@ export default function Dashboard() {
                             </div>
                         )}
 
-                        {notif.type === "fulfillment_accepted" && !notif.read && (
+                        {(notif.type === "fulfillment_accepted" || notif.type === "payment_success") && !notif.read && (
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => handleMarkAsRead(notif.id)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition"
                                 >
                                     <Check className="w-3 h-3" />
-                                    Marcar como Lido
+                                    OK
                                 </button>
                             </div>
                         )}
                     </div>
-                    {!notif.read && notif.type !== "fulfillment_accepted" && (
+                    {!notif.read && notif.type !== "fulfillment_accepted" && notif.type !== "payment_success" && (
                         <button onClick={() => handleMarkAsRead(notif.id)} className="text-slate-400 hover:text-violet-600 transition" title="Marcar como lida">
                             <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
                         </button>
