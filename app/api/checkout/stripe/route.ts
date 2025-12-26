@@ -40,7 +40,9 @@ export async function POST(req: Request) {
         }
 
         const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card', 'pix'],
+            automatic_payment_methods: {
+                enabled: true,
+            },
             line_items: [
                 {
                     price_data: {
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
                 packageId: packageId,
                 coins: pack.coins.toString(),
             },
-        });
+        } as any);
 
         return NextResponse.json({ url: session.url });
 
