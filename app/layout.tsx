@@ -6,6 +6,7 @@ import { MobileGuard } from "./components/MobileGuard";
 
 import { Providers } from "./providers";
 import ClickSoundProvider from "./components/ClickSoundProvider";
+import { GlobalChat } from "./components/GlobalChat";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -74,6 +75,9 @@ export default function RootLayout({
             <Providers>
               {children}
             </Providers>
+
+            {/* Global Chat - Available on all pages */}
+            <GlobalChat />
           </AuthProvider>
         </MobileGuard>
       </body>

@@ -249,9 +249,19 @@ export default function Dashboard() {
 
     const [userCredits, setUserCredits] = useState<number | null>(null);
 
+    // User Performance Stats
+    const [userStats, setUserStats] = useState<{
+        total: number;
+        correct: number;
+        incorrect: number;
+        accuracy: number;
+    }>({ total: 0, correct: 0, incorrect: 0, accuracy: 0 });
+    const [loadingStats, setLoadingStats] = useState(false);
+
     // Notification State
     const [notifications, setNotifications] = useState<any[]>([]);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const [isMobileNotificationsOpen, setIsMobileNotificationsOpen] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -286,6 +296,13 @@ export default function Dashboard() {
         }
     }, [user, loading, router]);
 
+    // Fetch stats when profile modal opens
+    useEffect(() => {
+        if (isProfileModalOpen && user) {
+            fetchUserStats();
+        }
+    }, [isProfileModalOpen, user]);
+
     // Subscribe to Notifications
     useEffect(() => {
         if (!user) return;
@@ -298,14 +315,128 @@ export default function Dashboard() {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             // Client-side sort
             notifs.sort((a: any, b: any) => {
-                const timeA = a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA;
+                return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
             });
             setNotifications(notifs);
         });
         return () => unsubscribe();
     }, [user]);
+
+    // Fetch user performance stats
+    const fetchUserStats = async () => {
+        if (!user) return;
+        setLoadingStats(true);
+        try {
+            const attemptsRef = collection(db, "users", user.uid, "questionAttempts");
+            const snapshot = await getDocs(attemptsRef);
+
+            let correct = 0;
+            let total = snapshot.size;
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.isCorrect) {
+                    correct++;
+                }
+            });
+
+            const incorrect = total - correct;
+            const accuracy = total > 0 ? (correct / total) * 100 : 0;
+
+            setUserStats({ total, correct, incorrect, accuracy });
+        } catch (error) {
+            console.error("Error fetching user stats:", error);
+        } finally {
+            setLoadingStats(false);
+        }
+    };
+
+    const renderNotificationsList = () => {
+        if (notifications.length === 0) {
+            return <div className="p-8 text-center text-slate-500 text-sm">Nenhuma notificação recente.</div>;
+        }
+
+        return notifications.map(notif => (
+            <div key={notif.id} className={clsx(
+                "p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition",
+                !notif.read && "bg-violet-50/50 dark:bg-violet-900/10"
+            )}>
+                <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1">
+                        <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-1">{notif.title}</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">{notif.message}</p>
+
+                        {notif.type === "fulfillment_approval_needed" && (
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setIsNotificationsOpen(false);
+                                            setIsMobileNotificationsOpen(false);
+                                            router.push(`/dashboard/solve/${notif.data.examId}`);
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+                                    >
+                                        <FileText className="w-3 h-3" />
+                                        Analisar
+                                    </button>
+
+                                    {!notif.data?.accepted && !notif.data?.rejected ? (
+                                        <>
+                                            <button
+                                                onClick={() => handleAcceptFulfillment(notif)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 transition"
+                                            >
+                                                <Check className="w-3 h-3" />
+                                                Aceitar
+                                            </button>
+                                            <button
+                                                onClick={() => handleRejectFulfillment(notif)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
+                                            >
+                                                <X className="w-3 h-3" />
+                                                Recusar
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {notif.data?.accepted && (
+                                                <span className="text-green-600 font-bold text-xs select-none px-1">
+                                                    Prova aceita
+                                                </span>
+                                            )}
+                                            {notif.data?.rejected && (
+                                                <span className="text-red-500 font-bold text-xs select-none px-1">
+                                                    Prova recusada
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {notif.type === "fulfillment_accepted" && !notif.read && (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleMarkAsRead(notif.id)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition"
+                                >
+                                    <Check className="w-3 h-3" />
+                                    Marcar como Lido
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    {!notif.read && notif.type !== "fulfillment_accepted" && (
+                        <button onClick={() => handleMarkAsRead(notif.id)} className="text-slate-400 hover:text-violet-600 transition" title="Marcar como lida">
+                            <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
+                        </button>
+                    )}
+                </div>
+            </div>
+        ));
+    };
 
     // Close notifications when clicking outside
     useEffect(() => {
@@ -1002,86 +1133,7 @@ export default function Dashboard() {
                                                     <span className="text-xs text-slate-500">{notifications.filter(n => !n.read).length} não lidas</span>
                                                 </div>
                                                 <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                                                    {notifications.length === 0 ? (
-                                                        <div className="p-8 text-center text-slate-500 text-sm">Nenhuma notificação recente.</div>
-                                                    ) : (
-                                                        notifications.map(notif => (
-                                                            <div key={notif.id} className={clsx(
-                                                                "p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition",
-                                                                !notif.read && "bg-violet-50/50 dark:bg-violet-900/10"
-                                                            )}>
-                                                                <div className="flex justify-between items-start gap-3">
-                                                                    <div className="flex-1">
-                                                                        <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-1">{notif.title}</h4>
-                                                                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3">{notif.message}</p>
-
-                                                                        {notif.type === "fulfillment_approval_needed" && (
-                                                                            <div className="flex flex-col gap-2">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <button
-                                                                                        onClick={() => router.push(`/dashboard/solve/${notif.data.examId}`)}
-                                                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
-                                                                                    >
-                                                                                        <FileText className="w-3 h-3" />
-                                                                                        Analisar
-                                                                                    </button>
-
-                                                                                    {!notif.data?.accepted && !notif.data?.rejected ? (
-                                                                                        <>
-                                                                                            <button
-                                                                                                onClick={() => handleAcceptFulfillment(notif)}
-                                                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-bold rounded-lg hover:bg-violet-700 transition"
-                                                                                            >
-                                                                                                <Check className="w-3 h-3" />
-                                                                                                Aceitar
-                                                                                            </button>
-                                                                                            <button
-                                                                                                onClick={() => handleRejectFulfillment(notif)}
-                                                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
-                                                                                            >
-                                                                                                <X className="w-3 h-3" />
-                                                                                                Recusar
-                                                                                            </button>
-                                                                                        </>
-                                                                                    ) : (
-                                                                                        <>
-                                                                                            {notif.data?.accepted && (
-                                                                                                <span className="text-green-600 font-bold text-xs select-none px-1">
-                                                                                                    Prova aceita
-                                                                                                </span>
-                                                                                            )}
-                                                                                            {notif.data?.rejected && (
-                                                                                                <span className="text-red-500 font-bold text-xs select-none px-1">
-                                                                                                    Prova recusada
-                                                                                                </span>
-                                                                                            )}
-                                                                                        </>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-
-                                                                        {notif.type === "fulfillment_accepted" && !notif.read && (
-                                                                            <div className="flex gap-2">
-                                                                                <button
-                                                                                    onClick={() => handleMarkAsRead(notif.id)}
-                                                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition"
-                                                                                >
-                                                                                    <Check className="w-3 h-3" />
-                                                                                    Marcar como Lido
-                                                                                </button>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    {!notif.read && notif.type !== "fulfillment_accepted" && (
-                                                                        <button onClick={() => handleMarkAsRead(notif.id)} className="text-slate-400 hover:text-violet-600 transition" title="Marcar como lida">
-                                                                            <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        ))
-                                                    )}
+                                                    {renderNotificationsList()}
                                                 </div>
                                             </div>
                                         )}
@@ -1117,7 +1169,7 @@ export default function Dashboard() {
                                         <button
                                             onClick={() => setIsProfileModalOpen(true)}
                                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-full transition"
-                                            title="Editar Perfil"
+                                            title="Ver/Editar Perfil"
                                         >
                                             <Edit className="w-4 h-4" />
                                         </button>
@@ -1476,9 +1528,9 @@ export default function Dashboard() {
             {
                 isProfileModalOpen && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={handleCloseProfileModal}>
-                        <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 space-y-6" onClick={e => e.stopPropagation()}>
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-md max-h-[90vh] rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 space-y-6 overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
                             <div className="flex justify-between items-center">
-                                <h3 className="text-xl font-bold text-slate-800 dark:text-white">Editar Perfil</h3>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white">Seu Perfil</h3>
                                 <button onClick={handleCloseProfileModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                                     <X className="w-6 h-6" />
                                 </button>
@@ -1521,6 +1573,121 @@ export default function Dashboard() {
                                         placeholder="Seu nome"
                                     />
                                 </div>
+                            </div>
+
+                            {/* Performance Dashboard */}
+                            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <Target className="w-5 h-5 text-violet-600" />
+                                        Seu Desempenho
+                                    </h4>
+                                    {!loadingStats && userStats.total > 0 && (
+                                        <button
+                                            onClick={fetchUserStats}
+                                            className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                                        >
+                                            Atualizar
+                                        </button>
+                                    )}
+                                </div>
+
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    Apenas você pode ver essas informações
+                                </p>
+
+                                {loadingStats ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+                                    </div>
+                                ) : userStats.total === 0 ? (
+                                    <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                        <BookOpen className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Nenhuma questão respondida ainda</p>
+                                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Comece a resolver provas para ver suas estatísticas!</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {/* Stats Cards */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="bg-violet-50 dark:bg-violet-900/20 p-3 rounded-xl border border-violet-100 dark:border-violet-900/40">
+                                                <p className="text-xs text-violet-600 dark:text-violet-400 font-medium mb-1">Total</p>
+                                                <p className="text-2xl font-black text-violet-700 dark:text-violet-300">{userStats.total}</p>
+                                            </div>
+                                            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-100 dark:border-green-900/40">
+                                                <p className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Acertos</p>
+                                                <p className="text-2xl font-black text-green-700 dark:text-green-300">{userStats.correct}</p>
+                                            </div>
+                                            <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/40">
+                                                <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-1">Erros</p>
+                                                <p className="text-2xl font-black text-red-700 dark:text-red-300">{userStats.incorrect}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Donut Chart */}
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Taxa de Acerto</p>
+                                                <p className="text-2xl font-black text-violet-600 dark:text-violet-400">{userStats.accuracy.toFixed(1)}%</p>
+                                            </div>
+                                            <div className="relative w-32 h-32 mx-auto">
+                                                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                                    {/* Background circle */}
+                                                    <circle
+                                                        cx="50"
+                                                        cy="50"
+                                                        r="40"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="12"
+                                                        className="text-slate-200 dark:text-slate-700"
+                                                    />
+                                                    {/* Progress circle */}
+                                                    <circle
+                                                        cx="50"
+                                                        cy="50"
+                                                        r="40"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="12"
+                                                        strokeDasharray={`${(userStats.accuracy / 100) * 251.2} 251.2`}
+                                                        className="text-violet-600 dark:text-violet-400 transition-all duration-1000"
+                                                        strokeLinecap="round"
+                                                    />
+                                                </svg>
+                                            </div>
+
+                                            {/* Progress Bar */}
+                                            <div className="mt-4">
+                                                <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-gradient-to-r from-violet-500 to-violet-600 transition-all duration-1000 rounded-full"
+                                                        style={{ width: `${userStats.accuracy}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Motivational Message */}
+                                        <div className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 p-4 rounded-xl border border-violet-100 dark:border-violet-900/40">
+                                            <p className="text-sm font-bold text-violet-900 dark:text-violet-100 mb-1">
+                                                {userStats.accuracy >= 90 ? "🎉 Excelente!" :
+                                                    userStats.accuracy >= 75 ? "🌟 Muito Bom!" :
+                                                        userStats.accuracy >= 60 ? "💪 Continue Assim!" :
+                                                            "📚 Pratique Mais!"}
+                                            </p>
+                                            <p className="text-xs text-violet-700 dark:text-violet-300">
+                                                {userStats.accuracy >= 90 ? "Você está dominando! Continue nesse ritmo incrível." :
+                                                    userStats.accuracy >= 75 ? "Ótimo desempenho! Você está no caminho certo." :
+                                                        userStats.accuracy >= 60 ? "Bom trabalho! Mais prática e você chegará lá." :
+                                                            "Não desista! Cada questão é um aprendizado."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* My Requests Section */}
@@ -1658,7 +1825,7 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                             <p className="font-bold text-slate-800 dark:text-white truncate">{user.displayName || "Usuário"}</p>
                             <button onClick={() => { setIsMobileMenuOpen(false); setIsProfileModalOpen(true); }} className="text-xs text-violet-600 font-medium hover:underline">
-                                Editar Perfil
+                                Ver/Editar Perfil
                             </button>
                         </div>
                     </div>
@@ -1681,7 +1848,10 @@ export default function Dashboard() {
                         {/* Notifications */}
                         <div className="space-y-2">
                             <button
-                                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                                onClick={() => {
+                                    setIsMobileMenuOpen(false);
+                                    setIsMobileNotificationsOpen(true);
+                                }}
                                 className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition text-left"
                             >
                                 <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
@@ -1694,22 +1864,6 @@ export default function Dashboard() {
                                     </span>
                                 )}
                             </button>
-                            {/* Mobile Notifications List */}
-                            {isNotificationsOpen && (
-                                <div className="pl-4 border-l-2 border-slate-100 dark:border-slate-800 ml-5 space-y-3">
-                                    {notifications.length === 0 ? (
-                                        <p className="text-xs text-slate-400">Nenhuma notificação.</p>
-                                    ) : (
-                                        notifications.slice(0, 5).map(notif => (
-                                            <div key={notif.id} className={clsx("text-sm p-2 rounded bg-slate-50 dark:bg-slate-800/50", !notif.read && "border-l-2 border-violet-500")}>
-                                                <p className="font-bold text-slate-700 dark:text-slate-300 text-xs">{notif.title}</p>
-                                                <p className="text-xs text-slate-500 line-clamp-2">{notif.message}</p>
-                                            </div>
-                                        ))
-                                    )}
-
-                                </div>
-                            )}
                         </div>
 
                         <button
@@ -1805,6 +1959,60 @@ export default function Dashboard() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile Notifications Modal */}
+            {isMobileNotificationsOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 lg:hidden">
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
+                        onClick={() => setIsMobileNotificationsOpen(false)}
+                    />
+                    <div className="relative bg-white dark:bg-slate-900 w-full max-w-lg max-h-[85vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-800/50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl">
+                                    <Bell className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">Notificações</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                        {notifications.filter(n => !n.read).length} não lidas
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsMobileNotificationsOpen(false)}
+                                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Notifications List */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-900">
+                            {renderNotificationsList()}
+                        </div>
+
+                        {/* Footer */}
+                        {notifications.length > 0 && notifications.some(n => !n.read) && (
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                                <button
+                                    onClick={async () => {
+                                        const unread = notifications.filter(n => !n.read);
+                                        for (const n of unread) {
+                                            await handleMarkAsRead(n.id);
+                                        }
+                                    }}
+                                    className="w-full py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition active:scale-[0.98] text-sm"
+                                >
+                                    Marcar todas como lidas
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
