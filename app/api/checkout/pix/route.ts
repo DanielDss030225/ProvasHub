@@ -34,8 +34,8 @@ export async function POST(req: Request) {
             reference: `coins_${packageId}_${userId}_${Date.now()}`,
             customer: {
                 name: userName || 'Usuário ProvasHub',
-                email: userEmail || 'contato@provashub.com.br',
-                tax_id: "12345678909", // Standard fake CPF for testing if not provided
+                email: userEmail || 'danielintheend@gmail.com',
+                tax_id: "14495585690", // CPF do proprietário
                 phones: [
                     {
                         country: "55",
