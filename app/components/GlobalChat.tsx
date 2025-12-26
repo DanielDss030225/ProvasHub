@@ -7,6 +7,7 @@ import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp,
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Send, Edit2, Trash2, Check } from "lucide-react";
 import clsx from "clsx";
+import { usePathname } from "next/navigation";
 
 interface Message {
     id: string;
@@ -20,6 +21,7 @@ interface Message {
 }
 
 export function GlobalChat() {
+    const pathname = usePathname();
     const { user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -184,6 +186,16 @@ export function GlobalChat() {
         setDeleteConfirmId(null);
     };
 
+    // Hide chat on exam resolution screens
+    const hideOnRoutes = [
+        '/dashboard/solve',
+        '/dashboard/questions-list',
+        '/dashboard/questions/solve'
+    ];
+
+    const shouldHide = hideOnRoutes.some(route => pathname?.startsWith(route));
+
+    if (shouldHide) return null;
 
     return (
         <div className="fixed bottom-4 right-4 z-50">

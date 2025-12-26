@@ -81,6 +81,7 @@ export default function QuestionBankPage() {
     const [solveLimit, setSolveLimit] = useState(20);
     const observerTarget = useRef<HTMLDivElement>(null);
     const [filters, setFilters] = useState<FilterState>(initialFilters);
+    const [hideAnswered, setHideAnswered] = useState(false);
     const [dynamicOptions, setDynamicOptions] = useState<{
         concursos: string[];
         bancas: string[];
@@ -139,6 +140,14 @@ export default function QuestionBankPage() {
 
         fetchAttempts();
     }, [user]);
+
+    // Persistence for hideAnswered (Initial Load Only)
+    useEffect(() => {
+        const saved = localStorage.getItem("hideAnsweredQuestions");
+        if (saved !== null) {
+            setHideAnswered(saved === "true");
+        }
+    }, []);
 
     // 1. Initial Data Fetch (One time)
     useEffect(() => {
@@ -243,13 +252,21 @@ export default function QuestionBankPage() {
             }
         }
 
+        if (hideAnswered) {
+            filtered = filtered.filter(q => !questionAttempts.has(q.id));
+        }
+
         setQuestions(filtered);
 
         // 3. Recalculate Facets (Dynamic Options)
         const getUniqueOptions = (key: keyof QuestionBankItem, skipKey: keyof FilterState) => {
             // To be truly "smart", when picking options for "Banca", we should consider filters applied to OTHER fields
+            let availableItems = applyFilters(allQuestions, filters, skipKey);
+
+            if (hideAnswered) {
+                availableItems = availableItems.filter(q => !questionAttempts.has(q.id));
+            }
             // but NOT the "Banca" field itself, so you can still see/pick other Bancas.
-            const availableItems = applyFilters(allQuestions, filters, skipKey);
             const set = new Set<string>();
             availableItems.forEach(item => {
                 const val = (item as any)[key];
@@ -276,7 +293,10 @@ export default function QuestionBankPage() {
             estados: getUniqueOptions('estado' as any, 'estado'),
             municipios: getUniqueOptions('municipio' as any, 'municipio'),
             tipos: (() => {
-                const availableItems = applyFilters(allQuestions, filters, 'tipoQuestao');
+                let availableItems = applyFilters(allQuestions, filters, 'tipoQuestao');
+                if (hideAnswered) {
+                    availableItems = availableItems.filter(q => !questionAttempts.has(q.id));
+                }
                 const types = new Set<string>();
                 availableItems.forEach(q => q.tipoQuestao && types.add(q.tipoQuestao));
                 const res = [];
@@ -287,7 +307,7 @@ export default function QuestionBankPage() {
         }));
 
         setVisibleCount(20);
-    }, [allQuestions, filters, searchQuery]);
+    }, [allQuestions, filters, searchQuery, hideAnswered, questionAttempts]);
 
     // Infinite Scroll Logic
     useEffect(() => {
@@ -319,6 +339,7 @@ export default function QuestionBankPage() {
     const clearFilters = () => {
         setFilters(initialFilters);
         setSearchQuery("");
+        setHideAnswered(false);
     };
 
     const hasActiveFilters = Object.values(filters).some(v => v !== "") || searchQuery.trim() !== "";
@@ -479,15 +500,30 @@ export default function QuestionBankPage() {
                             <Filter className="w-5 h-5 text-violet-500" />
                             <h2 className="font-bold text-sm md:text-base text-slate-800 dark:text-white uppercase tracking-tight">Filtros Inteligentes</h2>
                         </div>
-                        {hasActiveFilters && (
-                            <button
-                                onClick={clearFilters}
-                                className="text-[10px] md:text-xs font-bold text-red-500 hover:text-red-600 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition border border-red-100 dark:border-red-900/20"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                                LIMPAR FILTROS
-                            </button>
-                        )}
+                        <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={hideAnswered}
+                                    onChange={(e) => {
+                                        const newValue = e.target.checked;
+                                        setHideAnswered(newValue);
+                                        localStorage.setItem("hideAnsweredQuestions", String(newValue));
+                                    }}
+                                    className="w-4 h-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                                />
+                                <span className="text-sm text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">Ocultar Respondidas</span>
+                            </label>
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="text-[10px] md:text-xs font-bold text-red-500 hover:text-red-600 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition border border-red-100 dark:border-red-900/20"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                    LIMPAR FILTROS
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="p-8 space-y-8">
