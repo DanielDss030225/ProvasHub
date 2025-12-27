@@ -647,7 +647,7 @@ export default function SolveQuizClient() {
                     setCreditPulse(true);
                     playSound('success');
                     setTimeout(() => setCreditPulse(false), 1000);
-                }}><Coins className="w-full h-full fill-yellow-500 animate-pulse" /></div>
+                }}><Coins className="w-full h-full fill-yellow-500 animate-[coinPulse_0.5s_linear_infinite]" /></div>
             ))}
         </div>
     );

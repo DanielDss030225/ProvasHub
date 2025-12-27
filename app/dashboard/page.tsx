@@ -9,7 +9,7 @@ import { collection, addDoc, query, where, getDocs, orderBy, Timestamp, updateDo
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { motion, Variants } from "framer-motion";
 
-import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play, CreditCard, Smartphone, Zap, Sparkles } from "lucide-react";
+import { Loader2, Upload, FileText, AlertCircle, LogOut, User, Edit, X, Search, Heart, Share2, Coins, Bell, Check, Trash2, CircleDollarSign, Target, Menu, BookOpen, Play, CreditCard, Smartphone, Zap, Sparkles, Video } from "lucide-react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { FormattedText } from "../components/FormattedText";
 import { ImageCropper } from "../components/ImageCropper";
@@ -1414,7 +1414,11 @@ export default function Dashboard() {
                                         <span>{userCredits !== null ? userCredits : '...'}</span>
                                     </button>
 
-                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+                                    <button
+                                        onClick={() => setIsProfileModalOpen(true)}
+                                        className="flex items-center gap-3 bg-white dark:bg-slate-900 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-800 shadow-sm hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all group"
+                                        title="Editar Perfil"
+                                    >
                                         {user.photoURL ? (
                                             <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" referrerPolicy="no-referrer" />
                                         ) : (
@@ -1423,16 +1427,14 @@ export default function Dashboard() {
                                             </div>
                                         )}
                                         <div className="text-sm">
-                                            <p className="font-semibold text-slate-700 dark:text-slate-200">{user.displayName || "Usuário"}</p>
+                                            <p className="font-semibold text-slate-700 dark:text-slate-200 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">{user.displayName || "Usuário"}</p>
                                         </div>
-                                        <button
-                                            onClick={() => setIsProfileModalOpen(true)}
-                                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-full transition"
-                                            title="Ver/Editar Perfil"
+                                        <div
+                                            className="p-1 text-slate-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 rounded-full transition"
                                         >
                                             <Edit className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                                        </div>
+                                    </button>
                                     <button
                                         onClick={handleLogout}
                                         className="flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition font-medium text-sm"
@@ -1490,13 +1492,13 @@ export default function Dashboard() {
                         </motion.div>
 
                         {/* Resolver Questões Cards Grid */}
-                        <motion.div variants={itemVariants as any} className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+                        <motion.div variants={itemVariants as any} className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
                             {/* Card 1: List View */}
                             <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
                                 onClick={() => router.push('/dashboard/questions-list')}
                             >
                                 <div className="flex items-center justify-between gap-4">
-                                    <div className="flex-1">
+                                    <div className="flex-1 min-w-0">
                                         <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
                                             <BookOpen className="w-5 h-5" />
                                             Resolver Questões
@@ -1516,13 +1518,33 @@ export default function Dashboard() {
                                 onClick={() => router.push('/dashboard/questions')}
                             >
                                 <div className="flex items-center justify-between gap-4">
-                                    <div className="flex-1">
+                                    <div className="flex-1 min-w-0">
                                         <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
                                             <Target className="w-5 h-5" />
                                             Resolver Questões Modalidade Quiz
                                         </h3>
                                         <p className="text-emerald-100 text-sm">
                                             Resolva uma por uma com cronômetro e feedback imediato.
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition shrink-0">
+                                        <Play className="w-8 h-8 fill-current" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 3: Aulas em Vídeo */}
+                            <div className="bg-gradient-to-br from-blue-500 to-cyan-600 p-6 rounded-2xl shadow-lg text-white transition-all hover:shadow-xl hover:-translate-y-1 cursor-pointer group"
+                                onClick={() => router.push('/dashboard/videos')}
+                            >
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-lg font-bold mb-1 flex items-center gap-2">
+                                            <Video className="w-5 h-5" />
+                                            Aulas em Vídeo
+                                        </h3>
+                                        <p className="text-blue-100 text-sm">
+                                            Assista aulas e resolva questões associadas.
                                         </p>
                                     </div>
                                     <div className="p-3 bg-white/20 rounded-xl group-hover:bg-white/30 transition shrink-0">
