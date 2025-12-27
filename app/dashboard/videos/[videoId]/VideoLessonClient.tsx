@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../../../../lib/firebase";
 import { doc, getDoc, updateDoc, increment, setDoc, serverTimestamp, runTransaction, collection, getDocs } from "firebase/firestore";
-import { Loader2, ArrowLeft, Eye, Clock, BookOpen, FileText, ChevronDown, ChevronUp, Share2 } from "lucide-react";
+import { Loader2, ArrowLeft, Eye, Clock, BookOpen, FileText, ChevronDown, ChevronUp, Share2, Lock, User } from "lucide-react";
 import { VideoPlayer } from "../../../components/VideoPlayer";
 import { QuestionCard } from "../../../components/QuestionCard";
 import { useAlert } from "../../../context/AlertContext";
@@ -52,7 +52,7 @@ interface VideoLessonClientProps {
 }
 
 export default function VideoLessonClient({ videoId }: VideoLessonClientProps) {
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const router = useRouter();
     const { showAlert } = useAlert();
 
@@ -231,6 +231,37 @@ export default function VideoLessonClient({ videoId }: VideoLessonClientProps) {
         return (
             <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
                 <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+            </div>
+        );
+    }
+
+    if (!user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
+                <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-xl border border-slate-200 dark:border-slate-800 text-center">
+                    <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Lock className="w-10 h-10 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-4">Login Necessário</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mb-8 font-medium leading-relaxed">
+                        Para assistir a este vídeo, você precisa estar conectado à sua conta.
+                    </p>
+                    <div className="space-y-4">
+                        <button
+                            onClick={signInWithGoogle}
+                            className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-2xl shadow-lg shadow-violet-500/30 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                        >
+                            <User className="w-5 h-5" />
+                            Acessar com Google
+                        </button>
+                        <button
+                            onClick={() => router.push('/')}
+                            className="w-full py-4 text-sm font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        >
+                            Voltar para a Página Inicial
+                        </button>
+                    </div>
+                </div>
             </div>
         );
     }
